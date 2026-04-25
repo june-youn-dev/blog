@@ -1,0 +1,168 @@
+---
+layout: base.njk
+title: Admin Sign-In
+summary: Issue a browser admin session cookie for the blog API.
+pageScript: /js/admin-auth.js
+pageScriptPreconnect: https://www.gstatic.com
+bodyClass: admin-page
+---
+<section
+    id="admin-app"
+    class="admin-shell"
+    data-api-url="{{ runtime.apiUrl }}"
+    data-firebase-api-key="{{ runtime.firebase.apiKey }}"
+    data-firebase-auth-domain="{{ runtime.firebase.authDomain }}"
+    data-firebase-app-id="{{ runtime.firebase.appId }}"
+    data-firebase-project-id="{{ runtime.firebase.projectId }}"
+>
+    <p class="admin-eyebrow">Administrative Access</p>
+    <h1>Admin Console</h1>
+    <p class="admin-lede">
+        This page signs the browser in with Google through Firebase Authentication, exchanges the
+        resulting Firebase ID token for the blog API's <code>HttpOnly</code> admin session cookie,
+        and then lets the browser create, edit, review, and trash posts through the authenticated
+        API.
+    </p>
+
+    <section class="admin-panel">
+        <p class="admin-panel-title">Session</p>
+        <p class="admin-copy">
+            The current browser session is checked through <code>{{ runtime.apiUrl }}/auth/session</code>.
+        </p>
+
+        <div class="admin-actions">
+            <button type="button" id="sign-in-button" class="admin-button">Continue with Google</button>
+            <button type="button" id="refresh-session-button" class="admin-button admin-button-secondary">Refresh Session Status</button>
+            <button type="button" id="clear-session-button" class="admin-button admin-button-secondary">Clear Session Cookie</button>
+        </div>
+
+        <p id="admin-status" class="admin-status" role="status" aria-live="polite">
+            Ready to start a new administrative sign-in.
+        </p>
+    </section>
+
+    <section class="admin-workspace">
+        <aside class="admin-panel admin-browser">
+            <div class="admin-browser-header">
+                <div>
+                    <p class="admin-panel-title">Posts</p>
+                    <p class="admin-copy">Authenticated listing from <code>{{ runtime.apiUrl }}/admin/posts</code>.</p>
+                </div>
+                <div class="admin-actions admin-actions-compact">
+                    <button type="button" id="new-post-button" class="admin-button admin-button-secondary">New Post</button>
+                    <button type="button" id="refresh-posts-button" class="admin-button admin-button-secondary">Refresh Posts</button>
+                </div>
+            </div>
+
+            <label class="admin-field">
+                <span>Status filter</span>
+                <select id="post-filter" class="admin-select">
+                    <option value="all">All statuses</option>
+                    <option value="draft">Draft</option>
+                    <option value="private">Private</option>
+                    <option value="public">Public</option>
+                    <option value="trashed">Trashed</option>
+                </select>
+            </label>
+
+            <ul id="post-list" class="admin-post-list" aria-live="polite">
+                <li class="admin-empty">Sign in to load the administrative post list.</li>
+            </ul>
+        </aside>
+
+        <section class="admin-panel admin-editor">
+            <div class="admin-editor-header">
+                <div>
+                    <p class="admin-panel-title">Editor</p>
+                    <p id="editor-caption" class="admin-copy">Create a new post or load an existing post from the list.</p>
+                </div>
+                <a id="open-public-link" class="admin-link" href="#" target="_blank" rel="noreferrer noopener" hidden>Open public page</a>
+            </div>
+
+            <form id="post-form" class="admin-form">
+                <input type="hidden" id="source-slug" name="sourceSlug">
+                <input type="hidden" id="source-public-id" name="sourcePublicId">
+
+                <div class="admin-form-grid">
+                    <label class="admin-field">
+                        <span>Canonical slug</span>
+                        <input id="slug-input" name="slug" type="text" autocomplete="off" required>
+                    </label>
+                    <label class="admin-field">
+                        <span>Status</span>
+                        <select id="status-input" name="status" class="admin-select">
+                            <option value="draft">Draft</option>
+                            <option value="private">Private</option>
+                            <option value="public">Public</option>
+                            <option value="trashed">Trashed</option>
+                        </select>
+                    </label>
+                </div>
+
+                <label class="admin-field">
+                    <span>Title</span>
+                    <input id="title-input" name="title" type="text" autocomplete="off" required>
+                </label>
+
+                <label class="admin-field">
+                    <span>Summary</span>
+                    <textarea id="summary-input" name="summary" rows="3"></textarea>
+                </label>
+
+                <label class="admin-field">
+                    <span>AsciiDoc body</span>
+                    <textarea id="body-input" name="bodyAdoc" rows="18" spellcheck="false" required></textarea>
+                </label>
+
+                <div class="admin-form-grid admin-form-grid-meta">
+                    <label class="admin-field">
+                        <span>Revision</span>
+                        <input id="revision-input" name="revisionNo" type="number" min="1" step="1" readonly>
+                    </label>
+                    <label class="admin-field">
+                        <span>Stable public ID</span>
+                        <input id="public-id-input" name="publicId" type="text" readonly>
+                    </label>
+                </div>
+
+                <div class="admin-form-grid admin-form-grid-meta">
+                    <label class="admin-field">
+                        <span>Created at</span>
+                        <input id="created-at-input" name="createdAt" type="text" readonly>
+                    </label>
+                    <label class="admin-field">
+                        <span>Updated at</span>
+                        <input id="updated-at-input" name="updatedAt" type="text" readonly>
+                    </label>
+                </div>
+
+                <div class="admin-actions">
+                    <button type="submit" id="save-post-button" class="admin-button">Create Post</button>
+                    <button type="button" id="trash-post-button" class="admin-button admin-button-danger" disabled>Move to Trash</button>
+                </div>
+            </form>
+        </section>
+    </section>
+
+    <details class="admin-details">
+        <summary>Configuration visible to the browser</summary>
+        <dl class="admin-config">
+            <div>
+                <dt>API origin</dt>
+                <dd><code>{{ runtime.apiUrl }}</code></dd>
+            </div>
+            <div>
+                <dt>Firebase project</dt>
+                <dd><code>{{ runtime.firebase.projectId or "(missing)" }}</code></dd>
+            </div>
+            <div>
+                <dt>Firebase auth domain</dt>
+                <dd><code>{{ runtime.firebase.authDomain or "(missing)" }}</code></dd>
+            </div>
+        </dl>
+    </details>
+
+    <noscript>
+        <p class="admin-error">JavaScript is required for the Firebase sign-in flow.</p>
+    </noscript>
+</section>

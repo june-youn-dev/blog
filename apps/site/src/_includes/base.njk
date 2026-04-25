@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% set resolvedUrl = canonicalUrl or (site.url ~ (page.url or "/")) %}
+    <title>{% if title %}{{ title }} | {% endif %}{{ site.title }}</title>
+    {% if summary %}<meta name="description" content="{{ summary | e }}">{% endif %}
+    <meta property="og:title" content="{{ title | default(site.title) | e }}">
+    {% if summary %}<meta property="og:description" content="{{ summary | e }}">{% endif %}
+    <meta property="og:type" content="{{ ogType or (slug and 'article' or 'website') }}">
+    <meta property="og:url" content="{{ resolvedUrl }}">
+    <link rel="canonical" href="{{ resolvedUrl }}">
+    <link rel="stylesheet" href="/css/style.css?v={{ styleHash }}">
+    {% if hasMath %}<style>{{ "css/katex.css" | inlineCss | safe }}</style>{% endif %}
+    {% if hasCode %}<style>{{ "css/hljs.css" | inlineCss | safe }}</style>{% endif %}
+    {% if pageScriptPreconnect %}<link rel="preconnect" href="{{ pageScriptPreconnect }}">{% endif %}
+</head>
+<body{% if bodyClass %} class="{{ bodyClass }}"{% endif %}>
+    <header class="site-header">
+        <nav><a href="/">{{ site.title }}</a></nav>
+    </header>
+    <main>
+        {{ content | safe }}
+    </main>
+    {% if pageScript %}<script type="module" src="{{ pageScript }}"></script>{% endif %}
+</body>
+</html>

@@ -1,0 +1,18 @@
+---
+layout: base.njk
+title: Home
+---
+<h1>Posts</h1>
+{% if collections.posts.length %}
+<ul class="post-list">
+    {% for post in collections.posts | reverse %}
+    <li>
+        <a href="/posts/{{ post.data.slug }}/" class="post-title">{{ post.data.title }}</a>
+        {% if post.data.published_at %}<span class="post-date">{{ post.data.published_at | readableDate }}</span>{% endif %}
+        {% if post.data.summary %}<p class="post-summary">{{ post.data.summary }}</p>{% endif %}
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p>No posts yet.</p>
+{% endif %}

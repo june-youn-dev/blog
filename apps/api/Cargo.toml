@@ -1,0 +1,33 @@
+[package]
+name = "blog-api"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+worker = { version = "0.8", features = ["http", "d1"] }
+axum = { version = "0.8", default-features = false, features = ["json", "query"] }
+# `default-features = false` drops chrono's `clock` feature, which is the
+# only part of the crate that needs a system time source at runtime. The
+# Worker never calls `Utc::now()` — timestamps are produced by SQLite
+# DEFAULTs on insertion — so we only need `serde` for Serialize/Deserialize
+# of the RFC 3339 wire format and `alloc` for the `String` impls that
+# serde uses on `wasm32-unknown-unknown`.
+chrono = { version = "0.4", default-features = false, features = ["serde", "alloc"] }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+serde_json = "1"
+tower-service = "0.3"
+jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto", "use_pem"] }
+utoipa = { version = "5", features = ["chrono", "uuid"] }
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
+getrandom = { version = "0.2", features = ["js"] }
+uuid = { version = "1", features = ["v4", "serde", "js"] }
+# `chrono-impl` teaches ts-rs how to render `chrono::DateTime<Utc>` as the
+# TypeScript type `string`, so DTOs in `src/dto.rs` can use typed
+# timestamps without a manual `#[ts(type = "string")]` override on every
+# field.
+ts-rs = { version = "12", features = ["chrono-impl"] }

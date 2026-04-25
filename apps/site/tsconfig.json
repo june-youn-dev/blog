@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "allowJs": false,
+    "skipLibCheck": true
+  },
+  "include": [
+    "scripts/**/*.mts",
+    "src/js/**/*.mts",
+    "src/types/**/*.d.ts"
+  ]
+}

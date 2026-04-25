@@ -1,0 +1,16 @@
+# =============================================================================
+# Ignore rules local to the blog-api Cloudflare Worker crate.
+#
+# Rules scoped to this package live here so that the crate remains
+# self-contained.
+# =============================================================================
+
+# `worker-build` emits the compiled WebAssembly module and the JavaScript
+# shim that Wrangler loads at runtime into `build/`. The contents are fully
+# regenerable from the Rust sources.
+build/
+
+# Local development secrets. Wrangler reads this file automatically during
+# `wrangler dev` to populate Worker secrets (e.g. API_KEY). Must never be
+# committed — each developer creates their own.
+.dev.vars

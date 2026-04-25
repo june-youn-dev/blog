@@ -1,0 +1,30 @@
+# =============================================================================
+# sqlfluff configuration for the blog-api SQL sources.
+# =============================================================================
+
+[sqlfluff]
+# Target dialect. Cloudflare D1 is SQLite-compatible, so the linter must
+# parse the migrations with SQLite grammar rather than the generic ANSI
+# profile.
+dialect = sqlite
+
+max_line_length = 100
+
+# -----------------------------------------------------------------------------
+# Capitalisation rules
+# -----------------------------------------------------------------------------
+
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = upper
+
+[sqlfluff:rules:capitalisation.identifiers]
+extended_capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.functions]
+extended_capitalisation_policy = upper
+
+[sqlfluff:rules:capitalisation.literals]
+capitalisation_policy = upper
+
+[sqlfluff:rules:capitalisation.types]
+extended_capitalisation_policy = upper

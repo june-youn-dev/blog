@@ -1,0 +1,15 @@
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'none'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+
+/admin
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://www.gstatic.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' https: http://localhost:8787 http://127.0.0.1:8787; frame-src https://*.firebaseapp.com https://accounts.google.com https://apis.google.com
+
+/admin/
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://www.gstatic.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' https: http://localhost:8787 http://127.0.0.1:8787; frame-src https://*.firebaseapp.com https://accounts.google.com https://apis.google.com
+
+/admin/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://www.gstatic.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' https: http://localhost:8787 http://127.0.0.1:8787; frame-src https://*.firebaseapp.com https://accounts.google.com https://apis.google.com

@@ -1,0 +1,58 @@
+# =============================================================================
+# Wrangler configuration for the blog API Worker.
+#
+# This file is the source of truth for how Cloudflare Wrangler builds,
+# develops, and deploys the `blog-api` Worker, and for the bindings the
+# Worker is allowed to access at runtime.
+#
+# Local development relies on Miniflare, which is invoked transparently by
+# commands such as `wrangler dev` and `wrangler d1 execute --local`. Remote
+# deployment requires authentication via `wrangler login` and a populated
+# `database_id` field in the `[[d1_databases]]` section below.
+# =============================================================================
+
+name                = "blog-api"
+main                = "build/worker/shim.mjs"
+compatibility_date  = "2026-04-09"
+
+# -----------------------------------------------------------------------------
+# Build
+#
+# `worker-build` compiles the Rust crate to WebAssembly and emits the JS shim
+# that Wrangler expects at `main`. It is installed on demand so that the
+# command is self-contained on a fresh checkout.
+# -----------------------------------------------------------------------------
+[build]
+command = "cargo install -q worker-build && worker-build --release"
+
+# -----------------------------------------------------------------------------
+# D1 database binding
+#
+# The Worker accesses the D1 database through the `DB` binding; Rust code
+# retrieves it with `env.d1("DB")`.
+#
+# For local development Miniflare maintains its own on-disk SQLite file under
+# `.wrangler/` and ignores the contents of `database_id` at runtime. However,
+# recent Wrangler versions validate the field as a UUID during config
+# parsing, so the nil UUID below is used as a neutral placeholder. It must be
+# replaced with the real identifier produced by
+#
+#     wrangler d1 create blog
+#
+# before the first remote deployment.
+#
+# Migrations live under the default `migrations/` directory and are applied
+# by:
+#
+#     wrangler d1 migrations apply blog --local    # local Miniflare database
+#     wrangler d1 migrations apply blog             # remote production database
+#
+# Note: the argument passed to these commands is the `database_name` field
+# below (here, `blog`), not the binding name `DB`. The binding name is only
+# visible to the Worker runtime, whereas the database name is how Wrangler
+# identifies the D1 instance on the command line.
+# -----------------------------------------------------------------------------
+[[d1_databases]]
+binding        = "DB"
+database_name  = "blog"
+database_id    = "00000000-0000-0000-0000-000000000000"

@@ -1,0 +1,92 @@
+# =============================================================================
+# Operating system
+# =============================================================================
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# =============================================================================
+# Editors and IDEs
+# =============================================================================
+
+# Visual Studio Code: ignore personal workspace state, but allow shared
+# configuration files to be committed when needed.
+# Cherry-picked from: github/gitignore Global/VisualStudioCode.gitignore
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+!*.code-workspace
+*.vsix
+
+# Vim and Emacs swap and backup files.
+*.swp
+*.swo
+*~
+
+# JetBrains IDEs.
+.idea/
+
+# =============================================================================
+# Secrets and local environment
+# =============================================================================
+.env
+.env.*
+!.env.example
+
+# Cloudflare Wrangler local development secrets.
+.dev.vars
+.dev.vars.*
+
+# Generic private key and service account material.
+*.pem
+*.key
+service-account*.json
+
+# =============================================================================
+# Rust build artifacts (apps/api)
+# =============================================================================
+target/
+**/*.rs.bk
+**/mutants.out*/
+
+# =============================================================================
+# Zola static site build output (apps/site)
+# =============================================================================
+apps/site/public/
+
+# =============================================================================
+# Cloudflare Wrangler local state
+# =============================================================================
+.wrangler/
+
+# =============================================================================
+# Node tooling (prospective admin shell dependencies)
+# =============================================================================
+node_modules/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm
+.eslintcache
+.pnpm-store
+coverage/
+*.lcov
+*.tsbuildinfo
+.cache/
+.parcel-cache/
+
+# =============================================================================
+# Firebase tooling
+# =============================================================================
+firebase-debug.log
+firebase-debug.*.log
+.firebaserc
+.firebase/

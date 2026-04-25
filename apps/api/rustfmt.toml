@@ -1,0 +1,20 @@
+# nightly is invoked only for `cargo fmt`,
+# via `cargo +nightly fmt` in the `rust:fmt` pnpm script.
+unstable_features = true
+
+style_edition = "2024"
+
+max_width = 100
+hard_tabs = false
+tab_spaces = 4
+
+use_small_heuristics = "Max"
+merge_derives = false
+use_field_init_shorthand = true
+reorder_modules = true
+reorder_imports = true
+
+group_imports = "StdExternalCrate"
+imports_granularity = "Module"
+
+ignore = ["target"]

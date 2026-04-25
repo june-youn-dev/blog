@@ -1,0 +1,13 @@
+---
+layout: base.njk
+---
+<article>
+    <header class="post-header">
+        <h1>{{ title }}</h1>
+        {% if published_at %}<p class="post-meta"><time datetime="{{ published_at }}">{{ published_at | readableDate }}</time></p>{% endif %}
+    </header>
+    {% if summary %}<p class="post-summary-block">{{ summary }}</p>{% endif %}
+    <div class="post-body">
+        {{ content | safe }}
+    </div>
+</article>
