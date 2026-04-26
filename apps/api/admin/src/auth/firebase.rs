@@ -23,24 +23,6 @@ struct FirebaseClaims {
 #[derive(Debug, Clone, Deserialize)]
 struct FirebaseCerts(std::collections::HashMap<String, String>);
 
-/// Authenticates and authorizes a Firebase ID token for the
-/// single-administrator browser sign-in flow.
-///
-/// This function verifies the token signature and registered Firebase
-/// claims, then enforces the application policy that exactly one
-/// configured Firebase UID is allowed to exchange a browser sign-in
-/// into an administrative session cookie.
-///
-/// A successful result means that the token is suitable for exchange
-/// into an administrative session cookie. No identity payload is
-/// returned because the current application policy only needs a
-/// yes-or-no authorization decision.
-///
-/// # Errors
-///
-/// Returns [`AuthError`] when the token is malformed, cannot be
-/// verified, does not satisfy the expected Firebase claims, or does
-/// not belong to the configured administrator.
 pub async fn authenticate_admin_firebase_token(env: &Env, id_token: &str) -> Result<(), AuthError> {
     let claims = decode_verified_firebase_claims(env, id_token).await?;
     let now = now_unix_secs() as usize;

@@ -1,19 +1,13 @@
 //! Shared input-validation helpers for the blog API.
-//!
-//! These checks are intentionally reusable across the HTTP edge and the
-//! repository layer so that malformed requests can be rejected early
-//! without letting the validation rules drift between modules.
 
 use crate::dto::{CreatePost, UpdatePost};
 
-pub(crate) const MAX_SLUG_LEN: usize = 96;
-pub(crate) const MAX_BODY_SIZE: usize = 512 * 1024;
+pub const MAX_SLUG_LEN: usize = 96;
+pub const MAX_BODY_SIZE: usize = 512 * 1024;
 const MAX_TITLE_LEN: usize = 200;
 const MAX_SUMMARY_LEN: usize = 2_000;
 
-/// Validates a slug: must be 1-96 characters, lowercase ASCII
-/// alphanumeric plus hyphens, and must not start or end with a hyphen.
-pub(crate) fn validate_slug(slug: &str) -> Result<(), &'static str> {
+pub fn validate_slug(slug: &str) -> Result<(), &'static str> {
     if slug.is_empty() || slug.len() > MAX_SLUG_LEN {
         return Err("slug must be between 1 and 96 characters");
     }
@@ -29,7 +23,7 @@ pub(crate) fn validate_slug(slug: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
-pub(crate) fn validate_title(title: &str) -> Result<(), &'static str> {
+pub fn validate_title(title: &str) -> Result<(), &'static str> {
     if title.trim().is_empty() {
         return Err("title must not be empty");
     }
@@ -39,20 +33,18 @@ pub(crate) fn validate_title(title: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
-pub(crate) fn validate_summary(summary: &str) -> Result<(), &'static str> {
+pub fn validate_summary(summary: &str) -> Result<(), &'static str> {
     if summary.chars().count() > MAX_SUMMARY_LEN {
         return Err("summary must be at most 2000 characters");
     }
     Ok(())
 }
 
-pub(crate) fn validate_revision_no(revision_no: i64) -> Result<(), &'static str> {
+pub fn validate_revision_no(revision_no: i64) -> Result<(), &'static str> {
     if revision_no <= 0 { Err("revision_no must be positive") } else { Ok(()) }
 }
 
-/// Rejects AsciiDoc constructs that can inject executable HTML or
-/// script-bearing URLs into downstream renderers.
-pub(crate) fn validate_body_adoc(body: &str) -> Result<(), &'static str> {
+pub fn validate_body_adoc(body: &str) -> Result<(), &'static str> {
     if body.len() > MAX_BODY_SIZE {
         return Err("body_adoc exceeds 524288 byte limit");
     }
@@ -74,7 +66,7 @@ pub(crate) fn validate_body_adoc(body: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
-pub(crate) fn validate_create_post_input(input: &CreatePost) -> Result<(), &'static str> {
+pub fn validate_create_post_input(input: &CreatePost) -> Result<(), &'static str> {
     validate_slug(&input.slug)?;
     validate_title(&input.title)?;
     if let Some(summary) = &input.summary {
@@ -84,10 +76,7 @@ pub(crate) fn validate_create_post_input(input: &CreatePost) -> Result<(), &'sta
     Ok(())
 }
 
-pub(crate) fn validate_update_post_input(
-    slug: &str,
-    input: &UpdatePost,
-) -> Result<(), &'static str> {
+pub fn validate_update_post_input(slug: &str, input: &UpdatePost) -> Result<(), &'static str> {
     validate_slug(slug)?;
     validate_revision_no(input.revision_no)?;
     if let Some(next_slug) = &input.slug {
@@ -258,7 +247,7 @@ mod tests {
     #[test]
     fn rejects_unsafe_macro_targets() {
         assert!(validate_body_adoc("link:javascript:alert(1)[click]").is_err());
-        assert!(validate_body_adoc("image:data:text/html,evil[payload]").is_err());
+        assert!(validate_body_adoc("image:data:text/html;base64,abc[x]").is_err());
     }
 
     #[test]

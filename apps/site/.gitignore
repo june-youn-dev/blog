@@ -3,7 +3,6 @@ src/.fetch-staging-*
 src/posts.bak-*
 src/permalinks.bak-*
 src/posts/*
-!src/posts/posts.11tydata.js
 src/permalinks/
 src/js/admin-auth.js
 node_modules/

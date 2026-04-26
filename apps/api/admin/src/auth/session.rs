@@ -9,7 +9,7 @@ use super::AuthError;
 pub(crate) const SESSION_COOKIE_NAME: &str = "admin_session";
 const SESSION_TTL_SECS: i64 = 60 * 60 * 12;
 const SESSION_SUBJECT: &str = "admin_session";
-const SESSION_ISSUER: &str = "blog-api";
+const SESSION_ISSUER: &str = "blog-api-admin";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SessionClaims {
@@ -19,20 +19,6 @@ struct SessionClaims {
     exp: usize,
 }
 
-/// Issues a signed administrative session cookie.
-///
-/// The cookie value is an `HS256`-signed JWT containing the canonical
-/// issuer, subject, issued-at time, and expiration time for the
-/// session. The returned string is a complete `Set-Cookie` header
-/// value suitable for direct insertion into an HTTP response.
-///
-/// When `secure` is `true`, the cookie is marked with the `Secure`
-/// attribute so that browsers only attach it over HTTPS.
-///
-/// # Errors
-///
-/// Returns [`AuthError`] when the session secret is missing or the
-/// token cannot be encoded.
 pub fn issue_session_cookie(env: &Env, secure: bool) -> Result<String, AuthError> {
     let secret = session_secret(env)?;
     let issued_at = now_unix_secs();
@@ -52,33 +38,15 @@ pub fn issue_session_cookie(env: &Env, secure: bool) -> Result<String, AuthError
     let secure_attr = if secure { "; Secure" } else { "" };
 
     Ok(format!(
-        "{SESSION_COOKIE_NAME}={token}; Path=/; HttpOnly; Max-Age={SESSION_TTL_SECS}; SameSite=Lax{secure_attr}"
+        "{SESSION_COOKIE_NAME}={token}; Path=/; HttpOnly; Max-Age={SESSION_TTL_SECS}; SameSite=None{secure_attr}"
     ))
 }
 
-/// Builds a `Set-Cookie` header value that clears the administrative
-/// session cookie.
-///
-/// The returned value expires the cookie immediately and mirrors the
-/// `Secure` attribute policy used when the cookie was originally
-/// issued.
 pub fn clear_session_cookie(secure: bool) -> String {
     let secure_attr = if secure { "; Secure" } else { "" };
-    format!("{SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax{secure_attr}")
+    format!("{SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Max-Age=0; SameSite=None{secure_attr}")
 }
 
-/// Validates the administrative session cookie present in a `Cookie`
-/// header.
-///
-/// Returns `Ok(true)` only when the named cookie is present and its
-/// JWT signature, issuer, subject, and expiration time all validate
-/// against the current server secret. Missing or unrelated cookies are
-/// treated as `Ok(false)`.
-///
-/// # Errors
-///
-/// Returns [`AuthError`] when the server-side session secret is
-/// missing.
 pub fn has_valid_session_cookie(env: &Env, cookie_header: Option<&str>) -> Result<bool, AuthError> {
     let Some(cookie_header) = cookie_header else {
         return Ok(false);

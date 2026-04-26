@@ -1,14 +1,13 @@
 # @blog/api
 
-`@blog/api` is the operational backend for the blog. It runs on Cloudflare Workers, is written in Rust, and stores data in Cloudflare D1.
+`@blog/api` is the workspace for the blog backend. It contains the public Worker, the administrative Worker, and the shared Rust core crate, all backed by Cloudflare D1.
 
 ## What this package does
 
-- serves the public post API
-- serves the authenticated administrative API
-- verifies Firebase ID tokens for a single administrator
-- issues and validates the admin session cookie
-- exports OpenAPI and TypeScript bindings
+- builds the public read-only Worker
+- builds the authenticated administrative Worker
+- stores shared DTO, validation, and database logic in a reusable core crate
+- exports TypeScript bindings for the site
 
 ## Local setup
 
@@ -61,12 +60,7 @@ curl http://localhost:8787/
 
 ## API documentation
 
-The authoritative API documentation is generated from code.
-
-- OpenAPI JSON: `http://localhost:8787/openapi.json`
-- Swagger UI: `http://localhost:8787/docs`
-
-The API README is intentionally brief. Endpoint details belong to OpenAPI and the Rust source.
+The public Worker does not expose OpenAPI. The administrative Worker remains a separate deployment surface and is intentionally documented in code rather than in this README.
 
 ## TypeScript bindings
 

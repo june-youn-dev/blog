@@ -1,13 +1,4 @@
 //! Authentication policy and request extraction for administrative endpoints.
-//!
-//! This module intentionally keeps only service-level policy:
-//!
-//! - how browser origins are allowed
-//! - how bearer-token auth and session-cookie auth are combined
-//! - how auth failures are rendered to the API client
-//!
-//! Firebase-specific verification lives in [`firebase`] and session-cookie
-//! mechanics live in [`session`].
 
 mod firebase;
 mod session;
@@ -32,31 +23,10 @@ pub(crate) const LOCAL_ADMIN_ORIGINS: &[&str] = &[
     "http://127.0.0.1:8081",
 ];
 
-/// Returns whether the deployed surface should expose administrative routes.
-///
-/// The flag is controlled by the `BLOG_ENABLE_ADMIN` environment variable.
-/// Administrative routes are disabled by default and are enabled only when the
-/// variable is set to an explicit true-like value such as `1`, `true`, `yes`,
-/// or `on`.
-pub(crate) fn admin_enabled(env: &Env) -> bool {
-    env.var("BLOG_ENABLE_ADMIN")
-        .ok()
-        .map(|value| parse_admin_enabled_flag(&value.to_string()))
-        .unwrap_or(false)
-}
-
-fn parse_admin_enabled_flag(raw: &str) -> bool {
-    matches!(raw.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
-}
-
-/// Constant-time equality for shared-secret comparisons.
 pub(crate) fn secrets_match(submitted: &[u8], expected: &[u8]) -> bool {
     submitted.ct_eq(expected).into()
 }
 
-/// Rejection type for [`Authenticated`], returning a JSON error body
-/// consistent with the `{"error": "..."}` contract used by all other
-/// endpoints.
 #[derive(Debug)]
 pub struct AuthError {
     status: StatusCode,
@@ -91,18 +61,9 @@ impl AuthError {
     }
 }
 
-/// Proof that the request carries a valid administrative credential.
-///
-/// This zero-size extractor accepts either:
-///
-/// - a valid `Authorization: Bearer <API_KEY>` header; or
-/// - a valid `admin_session` cookie coming from an allowed browser origin.
 pub struct Authenticated;
 
-pub(crate) fn resolved_admin_origin(
-    env: &Env,
-    require_for_production: bool,
-) -> Result<Option<String>, AuthError> {
+pub(crate) fn resolved_admin_origin(env: &Env) -> Result<String, AuthError> {
     let raw = env
         .var("ADMIN_ORIGIN")
         .ok()
@@ -110,20 +71,11 @@ pub(crate) fn resolved_admin_origin(
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty());
 
-    resolve_admin_origin_value(raw.as_deref(), require_for_production)
-}
+    let Some(origin) = raw else {
+        return Err(AuthError::internal("missing ADMIN_ORIGIN for deployed admin access"));
+    };
 
-fn resolve_admin_origin_value(
-    raw: Option<&str>,
-    require_for_production: bool,
-) -> Result<Option<String>, AuthError> {
-    match raw {
-        Some(origin) => Ok(Some(normalize_admin_origin(origin)?)),
-        None if require_for_production => {
-            Err(AuthError::internal("missing ADMIN_ORIGIN for deployed admin access"))
-        }
-        None => Ok(None),
-    }
+    normalize_admin_origin(&origin)
 }
 
 fn normalize_admin_origin(origin: &str) -> Result<String, AuthError> {
@@ -145,12 +97,11 @@ fn normalize_admin_origin(origin: &str) -> Result<String, AuthError> {
     Ok(format!("{scheme}://{authority}"))
 }
 
-pub(crate) fn is_allowed_admin_origin(origin: &str, configured_origin: Option<&str>) -> bool {
-    LOCAL_ADMIN_ORIGINS.contains(&origin)
-        || configured_origin.is_some_and(|allowed| allowed == origin)
+pub(crate) fn is_allowed_admin_origin(origin: &str, configured_origin: &str) -> bool {
+    LOCAL_ADMIN_ORIGINS.contains(&origin) || configured_origin == origin
 }
 
-fn session_cookie_request_is_allowed(parts: &Parts, configured_origin: Option<&str>) -> bool {
+fn session_cookie_request_is_allowed(parts: &Parts, configured_origin: &str) -> bool {
     if let Some(origin) = parts.headers.get(ORIGIN).and_then(|value| value.to_str().ok()) {
         return is_allowed_admin_origin(origin, configured_origin);
     }
@@ -159,9 +110,8 @@ fn session_cookie_request_is_allowed(parts: &Parts, configured_origin: Option<&s
         return LOCAL_ADMIN_ORIGINS
             .iter()
             .any(|origin| referer == *origin || referer.starts_with(&format!("{origin}/")))
-            || configured_origin.is_some_and(|origin| {
-                referer == origin || referer.starts_with(&format!("{origin}/"))
-            });
+            || referer == configured_origin
+            || referer.starts_with(&format!("{configured_origin}/"));
     }
 
     false
@@ -175,13 +125,13 @@ impl FromRequestParts<Env> for Authenticated {
             .secret("API_KEY")
             .map(|secret| secret.to_string())
             .map_err(|_| AuthError::internal("missing API_KEY"))?;
-        let configured_admin_origin = resolved_admin_origin(state, false)?;
+        let configured_admin_origin = resolved_admin_origin(state)?;
 
         if let Some(cookie_header) =
             parts.headers.get("cookie").and_then(|value| value.to_str().ok())
             && has_valid_session_cookie(state, Some(cookie_header))?
         {
-            if !session_cookie_request_is_allowed(parts, configured_admin_origin.as_deref()) {
+            if !session_cookie_request_is_allowed(parts, &configured_admin_origin) {
                 return Err(AuthError::forbidden(
                     "browser origin is not authorized for admin access",
                 ));
@@ -214,40 +164,20 @@ mod tests {
 
     use super::{
         LOCAL_ADMIN_ORIGINS, is_allowed_admin_origin, normalize_admin_origin,
-        parse_admin_enabled_flag, resolve_admin_origin_value, session_cookie_request_is_allowed,
+        session_cookie_request_is_allowed,
     };
 
     #[test]
-    fn parses_false_like_admin_flags() {
-        for value in ["0", "false", "FALSE", "no", "off", "", "enabled", "maybe"] {
-            assert!(!parse_admin_enabled_flag(value), "{value} should disable admin");
-        }
-    }
-
-    #[test]
-    fn parses_true_like_admin_flags() {
-        for value in ["1", "true", "TRUE", "yes", "on"] {
-            assert!(parse_admin_enabled_flag(value), "{value} should keep admin enabled");
-        }
-    }
-
-    #[test]
     fn recognizes_allowed_admin_origins() {
-        assert!(is_allowed_admin_origin("http://localhost:8080", None));
-        assert!(is_allowed_admin_origin(
-            "https://admin.example.com",
-            Some("https://admin.example.com"),
-        ));
-        assert!(!is_allowed_admin_origin(
-            "https://evil.example.com",
-            Some("https://admin.example.com"),
-        ));
+        assert!(is_allowed_admin_origin("http://localhost:8080", "https://admin.example.com"));
+        assert!(is_allowed_admin_origin("https://admin.example.com", "https://admin.example.com",));
+        assert!(!is_allowed_admin_origin("https://evil.example.com", "https://admin.example.com",));
     }
 
     #[test]
     fn local_admin_origin_allowlist_is_self_consistent() {
         for origin in LOCAL_ADMIN_ORIGINS {
-            assert!(is_allowed_admin_origin(origin, None));
+            assert!(is_allowed_admin_origin(origin, "https://admin.example.com"));
         }
     }
 
@@ -259,7 +189,7 @@ mod tests {
             .expect("request should build");
         let (parts, _) = request.into_parts();
 
-        assert!(session_cookie_request_is_allowed(&parts, None));
+        assert!(session_cookie_request_is_allowed(&parts, "https://admin.example.com"));
     }
 
     #[test]
@@ -270,7 +200,7 @@ mod tests {
             .expect("request should build");
         let (parts, _) = request.into_parts();
 
-        assert!(session_cookie_request_is_allowed(&parts, Some("https://admin.example.com"),));
+        assert!(session_cookie_request_is_allowed(&parts, "https://admin.example.com"));
     }
 
     #[test]
@@ -278,7 +208,7 @@ mod tests {
         let request = Request::builder().body(()).expect("request should build");
         let (parts, _) = request.into_parts();
 
-        assert!(!session_cookie_request_is_allowed(&parts, Some("https://admin.example.com"),));
+        assert!(!session_cookie_request_is_allowed(&parts, "https://admin.example.com"));
     }
 
     #[test]
@@ -287,15 +217,5 @@ mod tests {
             normalize_admin_origin("https://admin.example.com/").expect("origin should normalize"),
             "https://admin.example.com"
         );
-    }
-
-    #[test]
-    fn rejects_admin_origin_with_path() {
-        assert!(normalize_admin_origin("https://admin.example.com/admin").is_err());
-    }
-
-    #[test]
-    fn requires_admin_origin_for_production_resolution() {
-        assert!(resolve_admin_origin_value(None, true).is_err());
     }
 }

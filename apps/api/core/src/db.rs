@@ -1,8 +1,4 @@
 //! Thin repository layer over the Cloudflare D1 binding.
-//!
-//! All SQL literals and row-to-struct mappings for the `posts` table live
-//! here so that handlers in `src/lib.rs` never see raw SQL. Adding a new
-//! query means adding a function here and exposing a DTO from `src/dto.rs`.
 
 use uuid::Uuid;
 use worker::Env;
@@ -10,38 +6,19 @@ use worker::Env;
 use crate::dto::{CreatePost, Post, PostSummary, UpdatePost};
 use crate::validation::{validate_create_post_input, validate_update_post_input};
 
-/// Typed error for write operations, allowing handlers to map
-/// specific failure modes to appropriate HTTP status codes without
-/// relying on broad error-message string matching in the HTTP layer.
 pub enum WriteError {
-    /// Input validation failed (slug format, body size, etc.).
     Validation(String),
-    /// A UNIQUE constraint was violated (duplicate slug).
     Conflict,
-    /// An unexpected D1 or binding error.
     #[allow(dead_code)]
     Internal(worker::Error),
 }
 
-/// Explicit column list for the `posts` table.
-///
-/// Using a named constant instead of `SELECT *` decouples query
-/// results from schema ordering and makes future column additions
-/// a compile-time decision rather than a silent runtime change.
 const POST_COLUMNS: &str = "\
     id, public_id, slug, title, summary, body_adoc, status, \
     published_at, created_at, updated_at, revision_no";
 
-/// Explicit column list for public post listings.
 const POST_SUMMARY_COLUMNS: &str = "public_id, slug, title, summary, published_at";
 
-/// Lists every post for authenticated administrative tooling.
-///
-/// This query is intentionally unpaginated because the expected row
-/// count for a personal blog is small, and administrative interfaces
-/// benefit from receiving the full editable row including `body_adoc`.
-/// Results are ordered by `updated_at DESC, created_at DESC` so recent
-/// work appears first.
 pub async fn list_all_posts(env: &Env) -> worker::Result<Vec<Post>> {
     let db = env.d1("DB")?;
     let stmt = db.prepare(format!(
@@ -55,18 +32,6 @@ pub async fn list_all_posts(env: &Env) -> worker::Result<Vec<Post>> {
     result.results::<Post>()
 }
 
-/// Looks up a single **public** post by its slug.
-///
-/// Only posts with `status = 'public'` are returned. Draft and private
-/// posts are invisible to this function, preventing accidental leakage
-/// through the public `GET /posts/by-slug/{slug}` endpoint.
-///
-/// Returns `Ok(Some(post))` when a public row with the given slug is
-/// found, `Ok(None)` when the slug does not exist or is not public.
-///
-/// # Errors
-///
-/// Propagates any [`worker::Error`] raised along the query pipeline.
 pub async fn get_post_by_slug(env: &Env, slug: &str) -> worker::Result<Option<Post>> {
     let db = env.d1("DB")?;
     let public_status = crate::dto::PostStatus::Public.as_db_str();
@@ -84,7 +49,6 @@ pub async fn get_post_by_slug(env: &Env, slug: &str) -> worker::Result<Option<Po
     stmt.first::<Post>(None).await
 }
 
-/// Looks up a single **public** post by its stable public identifier.
 pub async fn get_post_by_public_id(env: &Env, public_id: Uuid) -> worker::Result<Option<Post>> {
     let db = env.d1("DB")?;
     let public_status = crate::dto::PostStatus::Public.as_db_str();
@@ -102,24 +66,6 @@ pub async fn get_post_by_public_id(env: &Env, public_id: Uuid) -> worker::Result
     stmt.first::<Post>(None).await
 }
 
-/// Lists every post whose `status` is [`crate::dto::PostStatus::Public`],
-/// newest first.
-///
-/// Ordered by `published_at DESC` so that the most recently published
-/// post appears at the head of the returned vector; `draft` and
-/// `private` posts are filtered out at the database level.
-///
-/// Returns `Ok(Vec::new())` when there are no public posts in the
-/// database — callers should treat the empty vector as a valid `200
-/// OK` response rather than a `404`.
-///
-/// No pagination is applied: the expected row count for a personal
-/// blog is small enough that returning every row is cheaper than
-/// paying the complexity cost of a cursor.
-///
-/// # Errors
-///
-/// Propagates any [`worker::Error`] raised along the query pipeline.
 pub async fn list_public_posts(env: &Env) -> worker::Result<Vec<PostSummary>> {
     let db = env.d1("DB")?;
     let public_status = crate::dto::PostStatus::Public.as_db_str();
@@ -137,20 +83,6 @@ pub async fn list_public_posts(env: &Env) -> worker::Result<Vec<PostSummary>> {
     result.results::<PostSummary>()
 }
 
-/// Inserts a new post and returns the created row.
-///
-/// Validates `slug` format and `body_adoc` size before touching the
-/// database. When `status` is [`crate::dto::PostStatus::Public`],
-/// `published_at` is populated with the current UTC timestamp. The
-/// statement uses `ON CONFLICT DO NOTHING RETURNING ...` so duplicate
-/// slugs are classified through SQL control flow instead of by parsing
-/// database error strings.
-///
-/// # Errors
-///
-/// Returns [`WriteError::Validation`] on validation failure,
-/// [`WriteError::Conflict`] when the slug already exists, and
-/// [`WriteError::Internal`] for unexpected binding or D1 failures.
 pub async fn create_post(env: &Env, p: &CreatePost) -> Result<Post, WriteError> {
     if let Err(msg) = validate_create_post_input(p) {
         return Err(WriteError::Validation(msg.into()));
@@ -188,34 +120,12 @@ pub async fn create_post(env: &Env, p: &CreatePost) -> Result<Post, WriteError> 
     }
 }
 
-/// The outcome of an [`update_post`] call.
 pub enum UpdateResult {
-    /// The row was updated. Contains the refreshed post.
     Updated(Post),
-    /// No row with the given slug exists.
     NotFound,
-    /// The row exists but its `revision_no` does not match the one
-    /// supplied by the caller, indicating a concurrent edit.
     Conflict,
 }
 
-/// Partially updates a post identified by `slug`.
-///
-/// Only the fields present (`Some`) in `payload` are written; absent
-/// fields keep their current value via `COALESCE`. To explicitly clear
-/// a nullable field (e.g. set `summary` to `NULL`), send the field as
-/// `""` (empty string) — the UPDATE statement maps empty strings to
-/// `NULL` for nullable text columns. `updated_at` is refreshed and
-/// `revision_no` is bumped on every successful update.
-///
-/// If the post transitions to [`crate::dto::PostStatus::Public`] and
-/// `published_at` is still `NULL`, it is set to the current UTC
-/// timestamp.
-///
-/// # Errors
-///
-/// Returns a [`worker::Error`] on validation failure, binding,
-/// execution, or deserialisation failure.
 pub async fn update_post(
     env: &Env,
     slug: &str,
@@ -230,10 +140,6 @@ pub async fn update_post(
     let status_val = payload.status.map(crate::dto::PostStatus::as_db_str);
     let public_status = crate::dto::PostStatus::Public.as_db_str();
 
-    // COALESCE(?N, col) keeps the existing value when the param is NULL.
-    // NULLIF(..., '') converts empty strings to NULL for nullable columns,
-    // allowing callers to explicitly clear `summary` by sending `""`.
-    // published_at is set on the first transition to 'public'.
     let update = db
         .prepare(
             r#"
@@ -286,7 +192,6 @@ pub async fn update_post(
     let changes = result.meta().ok().flatten().and_then(|m| m.changes).unwrap_or(0);
 
     if changes == 0 {
-        // Distinguish "slug not found" from "revision mismatch".
         let exists = db
             .prepare(
                 r#"
@@ -340,24 +245,12 @@ fn is_slug_conflict(err: &worker::Error) -> bool {
     }
 }
 
-/// The outcome of a [`trash_post`] call.
 pub enum TrashResult {
-    /// The row was moved to the trash.
     Trashed,
-    /// No row with the given slug exists.
     NotFound,
-    /// The row exists but its `revision_no` does not match.
     Conflict,
 }
 
-/// Moves a post to the trash by slug and revision number.
-///
-/// `revision_no` is required to prevent accidental deletion of a post
-/// that has been edited since the caller last read it.
-///
-/// # Errors
-///
-/// Returns a [`worker::Error`] on binding or execution failure.
 pub async fn trash_post(env: &Env, slug: &str, revision_no: i64) -> worker::Result<TrashResult> {
     let db = env.d1("DB")?;
     let trashed_status = crate::dto::PostStatus::Trashed.as_db_str();

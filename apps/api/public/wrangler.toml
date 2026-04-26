@@ -1,0 +1,12 @@
+name                = "blog-api"
+main                = "build/worker/shim.mjs"
+compatibility_date  = "2026-04-09"
+
+[build]
+command = "cargo install -q worker-build && worker-build --release"
+
+[[d1_databases]]
+binding        = "DB"
+database_name  = "blog"
+database_id    = "675a39e8-33fd-4d56-85bc-77f00eef70bf"
+migrations_dir = "../migrations"

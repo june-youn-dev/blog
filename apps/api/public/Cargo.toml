@@ -1,0 +1,17 @@
+[package]
+name = "blog-api-public"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+blog-api-core.workspace = true
+worker.workspace = true
+axum.workspace = true
+serde.workspace = true
+tower-service.workspace = true
+getrandom.workspace = true
+uuid.workspace = true
