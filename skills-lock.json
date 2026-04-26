@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "skills": {
+    "alloydb-basics": {
+      "source": "google/skills",
+      "sourceType": "github",
+      "computedHash": "e75d56d84f0d5b2234e0af4c3e90e16d5f07e37f6027ef4d1973c9aa57f1e07d"
+    },
+    "cloud-run-basics": {
+      "source": "google/skills",
+      "sourceType": "github",
+      "computedHash": "bc11572a238ce911487c58f2f6ebbb947525fd1a69514a44842c904af6fce319"
+    },
+    "cloud-sql-basics": {
+      "source": "google/skills",
+      "sourceType": "github",
+      "computedHash": "96281e7bb9f6b4c6ba1b6f1a1f28d99ccebf4639c320f14e9a429dc882d6e4c0"
+    },
+    "firebase-basics": {
+      "source": "google/skills",
+      "sourceType": "github",
+      "computedHash": "b1bbd67ca1bf614e1130ee6e02021c1518448fda4bcd420c81014c2e4ffb22ec"
+    },
+    "google-cloud-recipe-auth": {
+      "source": "google/skills",
+      "sourceType": "github",
+      "computedHash": "ab6de3028e6bbf55e7361ac16af3df9fa45b668d2183c5479d57773abac35c37"
+    }
+  }
+}
