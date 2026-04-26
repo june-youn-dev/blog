@@ -12,9 +12,9 @@
     "ts:check": "pnpm exec tsc --project tsconfig.json",
     "fetch": "node --experimental-strip-types scripts/fetch-posts.mts",
     "fetch:check": "node --experimental-strip-types scripts/check-fetch-fixture.mts",
-    "render:check": "node --experimental-strip-types scripts/check-render-fixture.mts",
+    "render:check": "BLOG_ALLOW_LOCAL_DEFAULTS=1 node --experimental-strip-types scripts/check-render-fixture.mts",
     "build": "pnpm run ts:build && pnpm run fetch && pnpm exec eleventy",
-    "dev": "pnpm run ts:build && pnpm exec eleventy --serve",
+    "dev": "BLOG_ALLOW_LOCAL_DEFAULTS=1 pnpm run ts:build && BLOG_ALLOW_LOCAL_DEFAULTS=1 pnpm exec eleventy --serve",
     "clean": "node --experimental-strip-types scripts/clean-generated.mts",
     "check": "pnpm run ts:check && pnpm run ts:build && pnpm run fetch:check && pnpm run render:check"
   },

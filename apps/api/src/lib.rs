@@ -29,6 +29,7 @@ use axum::http::header::{
     VARY,
 };
 use axum::http::{HeaderMap, Method, StatusCode, Uri};
+use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::Deserialize;
@@ -40,8 +41,7 @@ use worker::{Context, Env, HttpRequest, event};
 
 use crate::auth::{
     AuthError, Authenticated, authenticate_admin_firebase_token, clear_session_cookie,
-    configured_admin_origin, has_valid_session_cookie, is_allowed_admin_origin,
-    issue_session_cookie,
+    has_valid_session_cookie, is_allowed_admin_origin, issue_session_cookie, resolved_admin_origin,
 };
 use crate::db::{TrashResult, UpdateResult, WriteError};
 use crate::dto::{
@@ -119,9 +119,15 @@ async fn fetch(
     let method = req.method().clone();
     let uri = req.uri().clone();
     let path = uri.path().to_owned();
+    let require_admin_origin = !is_local_host(uri.host());
+    let configured_admin_origin = match resolved_admin_origin(&env, require_admin_origin) {
+        Ok(origin) => origin,
+        Err(error) => return Ok(error.into_response()),
+    };
     let request_origin =
         req.headers().get(ORIGIN).and_then(|value| value.to_str().ok()).map(str::to_owned);
-    let allowed_origin = allowed_admin_origin(&env, request_origin.as_deref());
+    let allowed_origin =
+        allowed_admin_origin(configured_admin_origin.as_deref(), request_origin.as_deref());
 
     if method == Method::OPTIONS
         && is_browser_api_path(&path)
@@ -202,10 +208,9 @@ fn apply_cors_headers(headers: &mut axum::http::HeaderMap, origin: &str) {
     headers.insert(VARY, ORIGIN.as_str().parse().expect("valid Vary header"));
 }
 
-fn allowed_admin_origin(env: &Env, origin: Option<&str>) -> Option<String> {
+fn allowed_admin_origin(configured_origin: Option<&str>, origin: Option<&str>) -> Option<String> {
     let origin = origin?;
-    is_allowed_admin_origin(origin, configured_admin_origin(env).as_deref())
-        .then(|| origin.to_owned())
+    is_allowed_admin_origin(origin, configured_origin).then(|| origin.to_owned())
 }
 
 fn is_browser_api_path(path: &str) -> bool {

@@ -20,7 +20,15 @@ type Post = {
 };
 
 const API_URL = (process.env.BLOG_API_URL || process.env.API_URL || "http://localhost:8787")
-  .replace(/\/+$/, "");
+  .trim();
+const ALLOW_LOCAL_DEFAULTS = process.env.BLOG_ALLOW_LOCAL_DEFAULTS === "1";
+const RESOLVED_API_URL = API_URL
+  ? API_URL.replace(/\/+$/, "")
+  : ALLOW_LOCAL_DEFAULTS
+    ? "http://localhost:8787"
+    : (() => {
+        throw new Error("BLOG_API_URL (or API_URL) is required for fetch runs outside explicit local development.");
+      })();
 const SRC_DIR = join(import.meta.dirname, "..", "src");
 const POSTS_DIR = join(import.meta.dirname, "..", "src", "posts");
 const PERMALINKS_DIR = join(import.meta.dirname, "..", "src", "permalinks");
@@ -34,12 +42,12 @@ async function fetchJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-const postSummaries = await fetchJson<PostSummary[]>(`${API_URL}/posts`);
+const postSummaries = await fetchJson<PostSummary[]>(`${RESOLVED_API_URL}/posts`);
 
 const posts = await Promise.all(
   postSummaries.map(async (summary) => {
     const post = await fetchJson<Post>(
-      `${API_URL}/posts/by-id/${encodeURIComponent(summary.public_id)}`,
+      `${RESOLVED_API_URL}/posts/by-id/${encodeURIComponent(summary.public_id)}`,
     );
 
     return {

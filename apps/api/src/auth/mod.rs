@@ -40,6 +40,7 @@ pub(crate) fn secrets_match(submitted: &[u8], expected: &[u8]) -> bool {
 /// Rejection type for [`Authenticated`], returning a JSON error body
 /// consistent with the `{"error": "..."}` contract used by all other
 /// endpoints.
+#[derive(Debug)]
 pub struct AuthError {
     status: StatusCode,
     message: String,
@@ -81,12 +82,50 @@ impl AuthError {
 /// - a valid `admin_session` cookie coming from an allowed browser origin.
 pub struct Authenticated;
 
-pub(crate) fn configured_admin_origin(env: &Env) -> Option<String> {
-    env.var("ADMIN_ORIGIN")
+pub(crate) fn resolved_admin_origin(
+    env: &Env,
+    require_for_production: bool,
+) -> Result<Option<String>, AuthError> {
+    let raw = env
+        .var("ADMIN_ORIGIN")
         .ok()
         .map(|value| value.to_string())
         .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
+        .filter(|value| !value.is_empty());
+
+    resolve_admin_origin_value(raw.as_deref(), require_for_production)
+}
+
+fn resolve_admin_origin_value(
+    raw: Option<&str>,
+    require_for_production: bool,
+) -> Result<Option<String>, AuthError> {
+    match raw {
+        Some(origin) => Ok(Some(normalize_admin_origin(origin)?)),
+        None if require_for_production => {
+            Err(AuthError::internal("missing ADMIN_ORIGIN for deployed admin access"))
+        }
+        None => Ok(None),
+    }
+}
+
+fn normalize_admin_origin(origin: &str) -> Result<String, AuthError> {
+    let uri: axum::http::Uri = origin
+        .parse()
+        .map_err(|_| AuthError::internal("ADMIN_ORIGIN must be a valid absolute origin"))?;
+    let scheme = uri
+        .scheme_str()
+        .ok_or_else(|| AuthError::internal("ADMIN_ORIGIN must include a scheme"))?;
+    let authority =
+        uri.authority().ok_or_else(|| AuthError::internal("ADMIN_ORIGIN must include a host"))?;
+
+    if uri.path() != "/" || uri.path_and_query().and_then(|value| value.query()).is_some() {
+        return Err(AuthError::internal(
+            "ADMIN_ORIGIN must be an origin only, without a path or query",
+        ));
+    }
+
+    Ok(format!("{scheme}://{authority}"))
 }
 
 pub(crate) fn is_allowed_admin_origin(origin: &str, configured_origin: Option<&str>) -> bool {
@@ -119,7 +158,7 @@ impl FromRequestParts<Env> for Authenticated {
             .secret("API_KEY")
             .map(|secret| secret.to_string())
             .map_err(|_| AuthError::internal("missing API_KEY"))?;
-        let configured_admin_origin = configured_admin_origin(state);
+        let configured_admin_origin = resolved_admin_origin(state, false)?;
 
         if let Some(cookie_header) =
             parts.headers.get("cookie").and_then(|value| value.to_str().ok())
@@ -156,7 +195,10 @@ impl FromRequestParts<Env> for Authenticated {
 mod tests {
     use axum::http::Request;
 
-    use super::{LOCAL_ADMIN_ORIGINS, is_allowed_admin_origin, session_cookie_request_is_allowed};
+    use super::{
+        LOCAL_ADMIN_ORIGINS, is_allowed_admin_origin, normalize_admin_origin,
+        resolve_admin_origin_value, session_cookie_request_is_allowed,
+    };
 
     #[test]
     fn recognizes_allowed_admin_origins() {
@@ -206,5 +248,23 @@ mod tests {
         let (parts, _) = request.into_parts();
 
         assert!(!session_cookie_request_is_allowed(&parts, Some("https://admin.example.com"),));
+    }
+
+    #[test]
+    fn normalizes_admin_origin_without_trailing_slash() {
+        assert_eq!(
+            normalize_admin_origin("https://admin.example.com/").expect("origin should normalize"),
+            "https://admin.example.com"
+        );
+    }
+
+    #[test]
+    fn rejects_admin_origin_with_path() {
+        assert!(normalize_admin_origin("https://admin.example.com/admin").is_err());
+    }
+
+    #[test]
+    fn requires_admin_origin_for_production_resolution() {
+        assert!(resolve_admin_origin_value(None, true).is_err());
     }
 }
