@@ -8,7 +8,7 @@
     },
     "scripts": {
         "migrate:local": "pnpm exec wrangler d1 migrations apply blog --local --config public/wrangler.toml",
-        "migrate:remote": "pnpm exec wrangler d1 migrations apply blog --config public/wrangler.toml",
+        "migrate:remote": "pnpm exec wrangler d1 migrations apply blog --remote --config public/wrangler.toml",
         "sql:lint": "PIPX_HOME=.pipx PIPX_BIN_DIR=.pipx/bin PIPX_LOG_DIR=.pipx/logs pipx run sqlfluff==4.1.0 lint migrations",
         "sql:fix": "PIPX_HOME=.pipx PIPX_BIN_DIR=.pipx/bin PIPX_LOG_DIR=.pipx/logs pipx run sqlfluff==4.1.0 fix migrations",
         "rust:fmt": "cargo +nightly fmt",
