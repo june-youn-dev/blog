@@ -3,7 +3,7 @@ main                = "build/worker/shim.mjs"
 compatibility_date  = "2026-04-09"
 
 [build]
-command = "cargo install -q worker-build && worker-build admin --release"
+command = "pnpm run build:admin"
 
 [[d1_databases]]
 binding        = "DB"

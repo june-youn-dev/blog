@@ -27,7 +27,7 @@
         "bindings:generate": "cargo test -p blog-api-core --lib export_bindings && pnpm run bindings:format",
         "bindings:format": "prettier --write \"../site/src/api-types/**/*.ts\"",
         "bindings:check": "node --experimental-strip-types scripts/check-bindings.mts",
-        "check": "pnpm run rust:fmt:check && pnpm run rust:lint && pnpm run rust:check && pnpm run rust:test && pnpm run bindings:check && pnpm run sql:lint"
+        "check": "pnpm run rust:fmt:check && pnpm run rust:lint && pnpm run rust:check && pnpm run rust:test && pnpm run bindings:check && pnpm run sql:lint && pnpm run build && pnpm run build:admin && pnpm run deploy:check && pnpm run deploy:check:admin"
     },
     "devDependencies": {
         "prettier": "^3.8.2",
