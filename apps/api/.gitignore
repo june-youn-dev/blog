@@ -14,3 +14,6 @@ build/
 # `wrangler dev` to populate Worker secrets (e.g. API_KEY). Must never be
 # committed — each developer creates their own.
 .dev.vars
+
+# Local pipx cache/log directories used by the SQL lint/fix scripts.
+.pipx/
