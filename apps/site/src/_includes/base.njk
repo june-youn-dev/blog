@@ -11,9 +11,18 @@
     <meta property="og:type" content="{{ ogType or (slug and 'article' or 'website') }}">
     <meta property="og:url" content="{{ resolvedUrl }}">
     <link rel="canonical" href="{{ resolvedUrl }}">
-    <link rel="stylesheet" href="/css/style.css?v={{ styleHash }}">
+    <link rel="stylesheet" href="/css/base.css?v={{ cssHashes['css/base.css'] }}">
+    {% set resolvedPageStyles = pageStyles or ["css/site.css"] %}
+    {% for cssKey in resolvedPageStyles %}
+        <link rel="stylesheet" href="/{{ cssKey }}?v={{ cssHashes[cssKey] }}">
+    {% endfor %}
     {% if hasMath %}<style>{{ "css/katex.css" | inlineCss | safe }}</style>{% endif %}
     {% if hasCode %}<style>{{ "css/hljs.css" | inlineCss | safe }}</style>{% endif %}
+    {% if extraInlineCssKeys %}
+        {% for cssKey in extraInlineCssKeys %}
+            <style>{{ cssKey | inlineCss | safe }}</style>
+        {% endfor %}
+    {% endif %}
     {% if pageScriptPreconnect %}<link rel="preconnect" href="{{ pageScriptPreconnect }}">{% endif %}
 </head>
 <body{% if bodyClass %} class="{{ bodyClass }}"{% endif %}>

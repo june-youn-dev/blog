@@ -1,6 +1,6 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import ts from "typescript";
+import { build } from "esbuild";
 
 type BuildEntry = {
   input: string;
@@ -15,31 +15,19 @@ const entries: BuildEntry[] = [
 ];
 
 for (const entry of entries) {
-  const source = await readFile(entry.input, "utf8");
-  const result = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.ES2022,
-      target: ts.ScriptTarget.ES2022,
-      moduleResolution: ts.ModuleResolutionKind.Bundler,
-      verbatimModuleSyntax: true,
-      strict: true,
-    },
-    fileName: entry.input,
-    reportDiagnostics: true,
-  });
-
-  const diagnostics = result.diagnostics ?? [];
-  const hardErrors = diagnostics.filter((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error);
-  if (hardErrors.length > 0) {
-    throw new Error(ts.formatDiagnosticsWithColorAndContext(hardErrors, {
-      getCanonicalFileName: (fileName) => fileName,
-      getCurrentDirectory: () => process.cwd(),
-      getNewLine: () => "\n",
-    }));
-  }
-
   await mkdir(dirname(entry.output), { recursive: true });
-  await writeFile(entry.output, result.outputText, "utf8");
+
+  await build({
+    entryPoints: [entry.input],
+    outfile: entry.output,
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    target: "es2022",
+    sourcemap: false,
+    logLevel: "silent",
+    external: ["https://www.gstatic.com/*"],
+  });
 }
 
 console.log(`Built ${entries.length} browser module(s).`);

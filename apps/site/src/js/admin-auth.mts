@@ -1,3 +1,6 @@
+import Asciidoctor from "@asciidoctor/core";
+import hljs from "highlight.js";
+import katex from "katex";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
 import {
   GoogleAuthProvider,
@@ -10,6 +13,7 @@ import {
 
 type PostStatus = "draft" | "private" | "public" | "trashed";
 type StatusTone = "pending" | "success" | "error";
+type WorkspaceView = "posts" | "editor";
 
 type Post = {
   public_id: string;
@@ -68,14 +72,33 @@ type ApiError = Error & {
   status: number;
 };
 
+type DraftPostForm = {
+  slug: string;
+  title: string;
+  summary: string;
+  body_adoc: string;
+  status: PostStatus;
+};
+
 type AppState = {
   authenticated: boolean;
   posts: Post[];
   selectedPublicId: string | null;
   busy: boolean;
+  activeView: WorkspaceView;
+  previewTimer: number | null;
 };
 
 type UiRefs = {
+  workspaceShell: HTMLElement | null;
+  postsView: HTMLElement | null;
+  editorView: HTMLElement | null;
+  lockedShell: HTMLElement | null;
+  sessionLabel: HTMLParagraphElement | null;
+  workspaceTitle: HTMLHeadingElement | null;
+  workspaceCopy: HTMLParagraphElement | null;
+  postsTabButton: HTMLButtonElement | null;
+  editorTabButton: HTMLButtonElement | null;
   signInButton: HTMLButtonElement | null;
   refreshSessionButton: HTMLButtonElement | null;
   clearSessionButton: HTMLButtonElement | null;
@@ -85,9 +108,10 @@ type UiRefs = {
   trashPostButton: HTMLButtonElement | null;
   statusNode: HTMLParagraphElement | null;
   editorCaption: HTMLParagraphElement | null;
+  previewCaption: HTMLParagraphElement | null;
   openPublicLink: HTMLAnchorElement | null;
   postFilter: HTMLSelectElement | null;
-  postList: HTMLUListElement | null;
+  postList: HTMLTableSectionElement | null;
   postForm: HTMLFormElement | null;
   sourceSlug: HTMLInputElement | null;
   sourcePublicId: HTMLInputElement | null;
@@ -100,14 +124,10 @@ type UiRefs = {
   publicIdInput: HTMLInputElement | null;
   createdAtInput: HTMLInputElement | null;
   updatedAtInput: HTMLInputElement | null;
-};
-
-type DraftPostForm = {
-  slug: string;
-  title: string;
-  summary: string;
-  body_adoc: string;
-  status: PostStatus;
+  previewTitle: HTMLHeadingElement | null;
+  previewSummary: HTMLParagraphElement | null;
+  previewBody: HTMLDivElement | null;
+  previewStatus: HTMLParagraphElement | null;
 };
 
 const root = document.getElementById("admin-app");
@@ -117,6 +137,15 @@ if (!(root instanceof HTMLElement)) {
 }
 
 const ui: UiRefs = {
+  workspaceShell: document.getElementById("admin-workspace"),
+  postsView: document.getElementById("admin-posts-view"),
+  editorView: document.getElementById("admin-editor-view"),
+  lockedShell: document.getElementById("admin-locked-shell"),
+  sessionLabel: document.getElementById("admin-session-label") as HTMLParagraphElement | null,
+  workspaceTitle: document.getElementById("workspace-title") as HTMLHeadingElement | null,
+  workspaceCopy: document.getElementById("workspace-copy") as HTMLParagraphElement | null,
+  postsTabButton: document.getElementById("workspace-posts-button") as HTMLButtonElement | null,
+  editorTabButton: document.getElementById("workspace-editor-button") as HTMLButtonElement | null,
   signInButton: document.getElementById("sign-in-button") as HTMLButtonElement | null,
   refreshSessionButton: document.getElementById("refresh-session-button") as HTMLButtonElement | null,
   clearSessionButton: document.getElementById("clear-session-button") as HTMLButtonElement | null,
@@ -126,9 +155,10 @@ const ui: UiRefs = {
   trashPostButton: document.getElementById("trash-post-button") as HTMLButtonElement | null,
   statusNode: document.getElementById("admin-status") as HTMLParagraphElement | null,
   editorCaption: document.getElementById("editor-caption") as HTMLParagraphElement | null,
+  previewCaption: document.getElementById("preview-caption") as HTMLParagraphElement | null,
   openPublicLink: document.getElementById("open-public-link") as HTMLAnchorElement | null,
   postFilter: document.getElementById("post-filter") as HTMLSelectElement | null,
-  postList: document.getElementById("post-list") as HTMLUListElement | null,
+  postList: document.getElementById("post-list") as HTMLTableSectionElement | null,
   postForm: document.getElementById("post-form") as HTMLFormElement | null,
   sourceSlug: document.getElementById("source-slug") as HTMLInputElement | null,
   sourcePublicId: document.getElementById("source-public-id") as HTMLInputElement | null,
@@ -141,6 +171,10 @@ const ui: UiRefs = {
   publicIdInput: document.getElementById("public-id-input") as HTMLInputElement | null,
   createdAtInput: document.getElementById("created-at-input") as HTMLInputElement | null,
   updatedAtInput: document.getElementById("updated-at-input") as HTMLInputElement | null,
+  previewTitle: document.getElementById("preview-title") as HTMLHeadingElement | null,
+  previewSummary: document.getElementById("preview-summary") as HTMLParagraphElement | null,
+  previewBody: document.getElementById("preview-body") as HTMLDivElement | null,
+  previewStatus: document.getElementById("preview-status-chip") as HTMLParagraphElement | null,
 };
 
 const config: AdminAppConfig = {
@@ -158,16 +192,20 @@ const state: AppState = {
   posts: [],
   selectedPublicId: null,
   busy: false,
+  activeView: "posts",
+  previewTimer: null,
 };
 
 const missingKeys = Object.entries(config.firebase)
   .filter(([, value]) => !value)
   .map(([key]) => key);
 
+const asciidoctor = Asciidoctor();
 let auth: unknown = null;
 let provider: GoogleAuthProvider | null = null;
 
 if (!config.apiUrl || missingKeys.length > 0) {
+  setSessionLabel("locked", "Browser configuration is incomplete");
   setStatus(
     `Missing browser configuration: ${[
       !config.apiUrl ? "apiUrl" : null,
@@ -176,6 +214,7 @@ if (!config.apiUrl || missingKeys.length > 0) {
     "error",
   );
   disableAllControls();
+  renderPreview(true);
 } else {
   const app = initializeApp(config.firebase);
   auth = getAuth(app);
@@ -183,7 +222,7 @@ if (!config.apiUrl || missingKeys.length > 0) {
   provider.setCustomParameters({ prompt: "select_account" });
 
   wireEvents();
-  resetEditor();
+  resetEditor({ switchView: false });
   await refreshSession({ announce: false });
 }
 
@@ -201,16 +240,31 @@ function wireEvents(): void {
     void loadPosts({ announce: true });
   });
   ui.newPostButton?.addEventListener("click", () => {
-    resetEditor();
-    setStatus("The editor was reset for a new post.", "pending");
+    resetEditor({ switchView: true });
+    setStatus("The editor was reset for a new draft.", "pending");
   });
-  ui.postFilter?.addEventListener("change", renderPostList);
+  ui.postFilter?.addEventListener("change", renderPostTable);
   ui.postForm?.addEventListener("submit", (event) => {
     void handleSavePost(event);
   });
   ui.trashPostButton?.addEventListener("click", () => {
     void handleTrashPost();
   });
+  ui.postsTabButton?.addEventListener("click", () => {
+    setActiveView("posts");
+  });
+  ui.editorTabButton?.addEventListener("click", () => {
+    setActiveView("editor");
+  });
+
+  for (const control of [ui.slugInput, ui.statusInput, ui.titleInput, ui.summaryInput, ui.bodyInput]) {
+    control?.addEventListener("input", () => {
+      schedulePreviewRender();
+    });
+    control?.addEventListener("change", () => {
+      schedulePreviewRender();
+    });
+  }
 }
 
 async function handleSignIn(): Promise<void> {
@@ -234,11 +288,7 @@ async function handleSignIn(): Promise<void> {
 
     await signOut(auth);
     await refreshSession({ announce: false });
-    await loadPosts({ announce: false });
-    setStatus(
-      "The admin session cookie was issued successfully. The administrative post list is now available.",
-      "success",
-    );
+    setStatus("The admin session cookie was issued and the workspace is now unlocked.", "success");
   } catch (error) {
     setStatus(normalizeError(error), "error");
   } finally {
@@ -255,8 +305,8 @@ async function handleClearSession(): Promise<void> {
     await apiFetch<void>("/auth/session", { method: "DELETE" });
     state.authenticated = false;
     state.posts = [];
-    resetEditor();
-    renderPostList();
+    resetEditor({ switchView: false });
+    renderPostTable();
     syncControls();
     setStatus("The admin session cookie was cleared.", "success");
   } catch (error) {
@@ -267,6 +317,8 @@ async function handleClearSession(): Promise<void> {
 }
 
 async function refreshSession({ announce }: { announce: boolean }): Promise<void> {
+  setSessionLabel("checking", "Checking browser session…");
+
   try {
     const payload = await apiFetch<SessionStatusResponse>("/auth/session");
     state.authenticated = Boolean(payload?.authenticated);
@@ -279,17 +331,18 @@ async function refreshSession({ announce }: { announce: boolean }): Promise<void
       }
     } else {
       state.posts = [];
-      resetEditor();
-      renderPostList();
+      resetEditor({ switchView: false });
+      renderPostTable();
       if (announce) {
         setStatus("No authenticated admin session cookie is currently present.", "pending");
       }
     }
   } catch (error) {
     state.authenticated = false;
-    syncControls();
     state.posts = [];
-    renderPostList();
+    resetEditor({ switchView: false });
+    syncControls();
+    renderPostTable();
     if (announce) {
       setStatus(normalizeError(error), "error");
     }
@@ -304,26 +357,26 @@ async function loadPosts({
   selectPublicId?: string | null;
 }): Promise<void> {
   if (!state.authenticated) {
-    renderPostList();
+    renderPostTable();
     return;
   }
 
   try {
     const posts = await apiFetch<Post[]>("/admin/posts");
     state.posts = Array.isArray(posts) ? posts : [];
-    renderPostList();
+    renderPostTable();
 
     if (selectPublicId) {
       const match = state.posts.find((post) => post.public_id === selectPublicId);
       if (match) {
-        selectPost(match.public_id);
+        selectPost(match.public_id, { switchView: false });
       } else if (state.selectedPublicId === selectPublicId) {
         state.selectedPublicId = null;
       }
     }
 
     if (!state.selectedPublicId && state.posts.length > 0) {
-      selectPost(state.posts[0].public_id);
+      selectPost(state.posts[0].public_id, { switchView: false });
     }
 
     if (announce) {
@@ -333,8 +386,8 @@ async function loadPosts({
     if (isUnauthorizedError(error)) {
       state.authenticated = false;
       state.posts = [];
-      resetEditor();
-      renderPostList();
+      resetEditor({ switchView: false });
+      renderPostTable();
       syncControls();
     }
     if (announce) {
@@ -390,8 +443,8 @@ async function handleSavePost(event: Event): Promise<void> {
     }
 
     upsertPost(post);
-    selectPost(post.public_id);
-    renderPostList();
+    selectPost(post.public_id, { switchView: true });
+    renderPostTable();
     setStatus(isExisting ? "The post was updated successfully." : "The post was created successfully.", "success");
   } catch (error) {
     if (isUnauthorizedError(error)) {
@@ -430,9 +483,9 @@ async function handleTrashPost(): Promise<void> {
     await loadPosts({ announce: false, selectPublicId: selectedPublicId || null });
     const refreshed = state.posts.find((post) => post.public_id === selectedPublicId);
     if (refreshed) {
-      selectPost(refreshed.public_id);
+      selectPost(refreshed.public_id, { switchView: true });
     } else {
-      resetEditor();
+      resetEditor({ switchView: true });
     }
     setStatus("The post was moved to the trash.", "success");
   } catch (error) {
@@ -446,11 +499,11 @@ async function handleTrashPost(): Promise<void> {
   }
 }
 
-function renderPostList(): void {
+function renderPostTable(): void {
   if (!ui.postList) return;
 
   if (!state.authenticated) {
-    ui.postList.innerHTML = '<li class="admin-empty">Sign in to load the administrative post list.</li>';
+    ui.postList.innerHTML = '<tr><td class="admin-empty" colspan="6">Sign in to load the administrative post list.</td></tr>';
     return;
   }
 
@@ -458,36 +511,46 @@ function renderPostList(): void {
   const visiblePosts = state.posts.filter((post) => filter === "all" || post.status === filter);
 
   if (visiblePosts.length === 0) {
-    ui.postList.innerHTML = '<li class="admin-empty">No posts match the current filter.</li>';
+    ui.postList.innerHTML = '<tr><td class="admin-empty" colspan="6">No posts match the current filter.</td></tr>';
     return;
   }
 
   ui.postList.innerHTML = visiblePosts
     .map((post) => {
-      const activeClass = post.public_id === state.selectedPublicId ? " is-active" : "";
+      const activeClass = post.public_id === state.selectedPublicId ? " class=\"is-active\"" : "";
       const publishedAt = post.published_at ? formatTimestamp(post.published_at) : "Unpublished";
-      const summary = escapeHtml(post.summary || "");
+      const summary = post.summary
+        ? `<span class="admin-post-row-summary">${escapeHtml(post.summary)}</span>`
+        : "";
+
       return `
-        <li>
-          <button type="button" class="admin-post-card${activeClass}" data-public-id="${escapeHtml(post.public_id)}">
-            <span class="admin-post-card-title">${escapeHtml(post.title)}</span>
-            <span class="admin-post-card-meta">${escapeHtml(post.slug)} · ${escapeHtml(post.status)} · r${escapeHtml(String(post.revision_no))}</span>
-            <span class="admin-post-card-meta">${escapeHtml(publishedAt)}</span>
-            ${summary ? `<span class="admin-post-card-summary">${summary}</span>` : ""}
-          </button>
-        </li>
+        <tr${activeClass}>
+          <td>
+            <div class="admin-post-row-title">
+              <strong>${escapeHtml(post.title)}</strong>
+              ${summary}
+            </div>
+          </td>
+          <td><code>${escapeHtml(post.slug)}</code></td>
+          <td>${escapeHtml(post.status)}</td>
+          <td>${escapeHtml(publishedAt)}</td>
+          <td>r${escapeHtml(String(post.revision_no))}</td>
+          <td class="admin-post-row-action">
+            <button type="button" class="admin-post-row-button" data-public-id="${escapeHtml(post.public_id)}">Open</button>
+          </td>
+        </tr>
       `;
     })
     .join("");
 
   ui.postList.querySelectorAll<HTMLButtonElement>("[data-public-id]").forEach((button) => {
     button.addEventListener("click", () => {
-      selectPost(button.getAttribute("data-public-id"));
+      selectPost(button.getAttribute("data-public-id"), { switchView: true });
     });
   });
 }
 
-function selectPost(publicId: string | null): void {
+function selectPost(publicId: string | null, options: { switchView: boolean }): void {
   if (!publicId) return;
 
   const post = state.posts.find((item) => item.public_id === publicId);
@@ -503,8 +566,8 @@ function selectPost(publicId: string | null): void {
   setTextAreaValue(ui.bodyInput, post.body_adoc);
   setInputValue(ui.revisionInput, String(post.revision_no));
   setInputValue(ui.publicIdInput, post.public_id);
-  setInputValue(ui.createdAtInput, post.created_at);
-  setInputValue(ui.updatedAtInput, post.updated_at);
+  setInputValue(ui.createdAtInput, formatTimestamp(post.created_at));
+  setInputValue(ui.updatedAtInput, formatTimestamp(post.updated_at));
 
   if (ui.editorCaption) {
     ui.editorCaption.textContent = `Editing ${post.slug} (${post.status}).`;
@@ -526,10 +589,14 @@ function selectPost(publicId: string | null): void {
     }
   }
 
-  renderPostList();
+  renderPostTable();
+  renderPreview(false);
+  if (options.switchView) {
+    setActiveView("editor");
+  }
 }
 
-function resetEditor(): void {
+function resetEditor({ switchView }: { switchView: boolean }): void {
   state.selectedPublicId = null;
   setInputValue(ui.sourceSlug, "");
   setInputValue(ui.sourcePublicId, "");
@@ -544,7 +611,7 @@ function resetEditor(): void {
   setInputValue(ui.updatedAtInput, "");
 
   if (ui.editorCaption) {
-    ui.editorCaption.textContent = "Create a new post or load an existing post from the list.";
+    ui.editorCaption.textContent = "Draft a post and review the rendered result live beside the editor.";
   }
   if (ui.savePostButton) {
     ui.savePostButton.textContent = "Create Post";
@@ -556,6 +623,137 @@ function resetEditor(): void {
     ui.openPublicLink.hidden = true;
     ui.openPublicLink.removeAttribute("href");
   }
+
+  renderPreview(true);
+  renderPostTable();
+  if (switchView) {
+    setActiveView("editor");
+  }
+}
+
+function renderPreview(isNewDraft: boolean): void {
+  const draft = readDraftFromFormSafe();
+
+  if (ui.previewTitle) {
+    ui.previewTitle.textContent = draft?.title || "Untitled post";
+  }
+  if (ui.previewStatus) {
+    ui.previewStatus.textContent = draft?.status || "draft";
+  }
+  if (ui.previewSummary) {
+    const summary = draft?.summary.trim() || "";
+    ui.previewSummary.hidden = summary.length === 0;
+    ui.previewSummary.textContent = summary;
+  }
+  if (ui.previewCaption) {
+    ui.previewCaption.textContent = isNewDraft
+      ? "Rendered preview updates as you type."
+      : "Rendered preview of the current editor state.";
+  }
+
+  if (!ui.previewBody) return;
+  if (!draft || !draft.body_adoc.trim()) {
+    ui.previewBody.innerHTML = '<p class="admin-empty">The live rendered preview will appear here.</p>';
+    return;
+  }
+
+  try {
+    const html = renderPreviewHtml(draft.body_adoc);
+    ui.previewBody.innerHTML = html || '<p class="admin-empty">The rendered preview is empty.</p>';
+  } catch (error) {
+    ui.previewBody.innerHTML = `<p class="admin-empty">${escapeHtml(normalizeError(error))}</p>`;
+  }
+}
+
+function schedulePreviewRender(): void {
+  if (state.previewTimer !== null) {
+    window.clearTimeout(state.previewTimer);
+  }
+
+  state.previewTimer = window.setTimeout(() => {
+    renderPreview(false);
+    state.previewTimer = null;
+  }, 120);
+}
+
+function renderPreviewHtml(bodyAdoc: string): string {
+  let html = String(asciidoctor.convert(bodyAdoc, {
+    safe: "safe",
+    attributes: {
+      showtitle: false,
+      stem: "latexmath",
+    },
+  }));
+
+  html = highlightCode(html);
+  html = sanitizeRenderedHtml(html);
+  html = renderMath(html);
+  return html;
+}
+
+function highlightCode(html: string): string {
+  return html.replace(
+    /<code class="language-([\w+#.-]+)"[^>]*>([\s\S]*?)<\/code>/g,
+    (_, lang: string, code: string) => {
+      const decoded = decodeEntities(code);
+      if (hljs.getLanguage(lang)) {
+        const result = hljs.highlight(decoded, { language: lang });
+        return `<code class="language-${lang} hljs">${result.value}</code>`;
+      }
+      return `<code class="language-${lang}">${code}</code>`;
+    },
+  );
+}
+
+function renderMath(html: string): string {
+  const parts = html.split(/(<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>)/gi);
+  for (let index = 0; index < parts.length; index += 1) {
+    if (index % 2 === 1) continue;
+
+    parts[index] = parts[index].replace(/\\\[([\s\S]*?)\\\]/g, (_, tex: string) => {
+      return katex.renderToString(decodeEntities(tex.trim()), {
+        displayMode: true,
+        throwOnError: false,
+      });
+    });
+
+    parts[index] = parts[index].replace(/\\\(([\s\S]*?)\\\)/g, (_, tex: string) => {
+      return katex.renderToString(decodeEntities(tex.trim()), {
+        displayMode: false,
+        throwOnError: false,
+      });
+    });
+  }
+
+  return parts.join("");
+}
+
+function sanitizeRenderedHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<(iframe|object|embed|meta|link|base)\b[\s\S]*?(?:<\/\1>|\/?>)/gi, "")
+    .replace(/\son[a-z-]+\s*=\s*(".*?"|'.*?'|[^\s>]+)/gi, "")
+    .replace(/\s(href|src)\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/gi, (_, attr, raw, dq, sq, bare) => {
+      const value = dq ?? sq ?? bare ?? "";
+      const normalized = value.trim().toLowerCase();
+      if (
+        normalized.startsWith("javascript:") ||
+        normalized.startsWith("vbscript:") ||
+        normalized.startsWith("data:")
+      ) {
+        return "";
+      }
+      return ` ${attr}=${raw}`;
+    });
+}
+
+function decodeEntities(value: string): string {
+  return value
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'");
 }
 
 function readDraftFromForm(): DraftPostForm {
@@ -565,6 +763,20 @@ function readDraftFromForm(): DraftPostForm {
     summary: ui.summaryInput?.value || "",
     body_adoc: requireValue(ui.bodyInput),
     status: requireSelectValue(ui.statusInput) as PostStatus,
+  };
+}
+
+function readDraftFromFormSafe(): DraftPostForm | null {
+  if (!ui.slugInput || !ui.titleInput || !ui.bodyInput || !ui.statusInput) {
+    return null;
+  }
+
+  return {
+    slug: ui.slugInput.value.trim(),
+    title: ui.titleInput.value.trim(),
+    summary: ui.summaryInput?.value || "",
+    body_adoc: ui.bodyInput.value,
+    status: ui.statusInput.value as PostStatus,
   };
 }
 
@@ -582,7 +794,10 @@ function upsertPost(post: Post): void {
   });
 }
 
-async function apiFetch<T>(path: string, options: { method?: string; body?: string; headers?: Record<string, string> } = {}): Promise<T> {
+async function apiFetch<T>(
+  path: string,
+  options: { method?: string; body?: string; headers?: Record<string, string> } = {},
+): Promise<T> {
   const response = await fetch(`${config.apiUrl}${path}`, {
     method: options.method || "GET",
     credentials: "include",
@@ -606,6 +821,31 @@ async function apiFetch<T>(path: string, options: { method?: string; body?: stri
   return payload as T;
 }
 
+function setActiveView(view: WorkspaceView): void {
+  state.activeView = view;
+
+  if (ui.postsView) {
+    ui.postsView.hidden = view !== "posts";
+  }
+  if (ui.editorView) {
+    ui.editorView.hidden = view !== "editor";
+  }
+  if (ui.postsTabButton) {
+    ui.postsTabButton.setAttribute("aria-selected", String(view === "posts"));
+  }
+  if (ui.editorTabButton) {
+    ui.editorTabButton.setAttribute("aria-selected", String(view === "editor"));
+  }
+  if (ui.workspaceTitle) {
+    ui.workspaceTitle.textContent = view === "posts" ? "Posts" : "Editor";
+  }
+  if (ui.workspaceCopy) {
+    ui.workspaceCopy.textContent = view === "posts"
+      ? "Review the administrative listing, filter by status, and open a post in the editor."
+      : "Edit the canonical fields on the left and review the rendered result live on the right.";
+  }
+}
+
 function disableAllControls(): void {
   for (const control of [
     ui.signInButton,
@@ -616,6 +856,8 @@ function disableAllControls(): void {
     ui.savePostButton,
     ui.trashPostButton,
     ui.postFilter,
+    ui.postsTabButton,
+    ui.editorTabButton,
     ui.slugInput,
     ui.statusInput,
     ui.titleInput,
@@ -628,8 +870,15 @@ function disableAllControls(): void {
 
 function syncControls(): void {
   if (!state.authenticated) {
-    resetEditor();
+    if (ui.workspaceShell) ui.workspaceShell.hidden = true;
+    if (ui.lockedShell) ui.lockedShell.hidden = false;
+    setSessionLabel("locked", "No authenticated admin session");
+    return;
   }
+
+  if (ui.workspaceShell) ui.workspaceShell.hidden = false;
+  if (ui.lockedShell) ui.lockedShell.hidden = true;
+  setSessionLabel("authenticated", "Authenticated workspace unlocked");
 
   const editorDisabled = state.busy || !state.authenticated;
 
@@ -639,14 +888,10 @@ function syncControls(): void {
   setControlDisabled(ui.refreshPostsButton, state.busy || !state.authenticated);
   setControlDisabled(ui.newPostButton, state.busy || !state.authenticated);
   setControlDisabled(ui.postFilter, state.busy || !state.authenticated);
+  setControlDisabled(ui.postsTabButton, state.busy || !state.authenticated);
+  setControlDisabled(ui.editorTabButton, state.busy || !state.authenticated);
 
-  for (const control of [
-    ui.slugInput,
-    ui.statusInput,
-    ui.titleInput,
-    ui.summaryInput,
-    ui.bodyInput,
-  ]) {
+  for (const control of [ui.slugInput, ui.statusInput, ui.titleInput, ui.summaryInput, ui.bodyInput]) {
     setControlDisabled(control, editorDisabled);
   }
 
@@ -672,6 +917,12 @@ function setStatus(message: string, tone: StatusTone): void {
   if (!ui.statusNode) return;
   ui.statusNode.textContent = message;
   ui.statusNode.dataset.tone = tone;
+}
+
+function setSessionLabel(stateName: "checking" | "locked" | "authenticated", message: string): void {
+  if (!ui.sessionLabel) return;
+  ui.sessionLabel.dataset.state = stateName;
+  ui.sessionLabel.textContent = message;
 }
 
 async function readJsonSafely<T>(response: Response): Promise<T | null> {
@@ -723,7 +974,7 @@ function escapeHtml(value: string): string {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
+    .replaceAll("\"", "&quot;")
     .replaceAll("'", "&#39;");
 }
 
@@ -745,9 +996,7 @@ function setSelectValue(input: HTMLSelectElement | null, value: string): void {
   }
 }
 
-function requireValue(
-  input: HTMLInputElement | HTMLTextAreaElement | null,
-): string {
+function requireValue(input: HTMLInputElement | HTMLTextAreaElement | null): string {
   if (!input) {
     throw new Error("A required form control is missing.");
   }

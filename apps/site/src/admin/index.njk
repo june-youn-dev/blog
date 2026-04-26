@@ -1,9 +1,15 @@
 ---
 layout: base.njk
-title: Admin Sign-In
-summary: Issue a browser admin session cookie for the blog API.
+title: Admin Console
+summary: Authenticate and manage blog posts through the browser-based administrative console.
 pageScript: /js/admin-auth.js
 pageScriptPreconnect: https://www.gstatic.com
+pageStyles:
+  - css/site.css
+  - css/admin.css
+extraInlineCssKeys:
+  - css/katex.css
+  - css/hljs.css
 bodyClass: admin-page
 ---
 <section
@@ -18,149 +24,201 @@ bodyClass: admin-page
     <p class="admin-eyebrow">Administrative Access</p>
     <h1>Admin Console</h1>
     <p class="admin-lede">
-        This page signs the browser in with Google through Firebase Authentication, exchanges the
-        resulting Firebase ID token for the blog API's <code>HttpOnly</code> admin session cookie,
-        and then lets the browser create, edit, review, and trash posts through the authenticated
-        API.
+        This workflow signs the browser in with Google through Firebase Authentication, exchanges
+        the resulting Firebase ID token for the blog API's <code>HttpOnly</code> admin session
+        cookie, and then unlocks the authenticated post-management workspace.
     </p>
 
-    <section class="admin-panel">
-        <p class="admin-panel-title">Session</p>
-        <p class="admin-copy">
-            The current browser session is checked through <code>{{ runtime.apiUrl }}/auth/session</code>.
-        </p>
-
-        <div class="admin-actions">
-            <button type="button" id="sign-in-button" class="admin-button">Continue with Google</button>
-            <button type="button" id="refresh-session-button" class="admin-button admin-button-secondary">Refresh Session Status</button>
-            <button type="button" id="clear-session-button" class="admin-button admin-button-secondary">Clear Session Cookie</button>
+    <section class="admin-panel admin-session-shell">
+        <div class="admin-session-header">
+            <div>
+                <p class="admin-panel-title">Session</p>
+                <p id="admin-session-label" class="admin-session-label" data-state="checking">
+                    Checking browser session…
+                </p>
+            </div>
+            <div class="admin-actions">
+                <button type="button" id="sign-in-button" class="admin-button">Continue with Google</button>
+                <button type="button" id="refresh-session-button" class="admin-button admin-button-secondary">Refresh Session Status</button>
+                <button type="button" id="clear-session-button" class="admin-button admin-button-secondary">Sign Out</button>
+            </div>
         </div>
 
         <p id="admin-status" class="admin-status" role="status" aria-live="polite">
-            Ready to start a new administrative sign-in.
+            Checking whether the browser already has a valid admin session cookie.
         </p>
     </section>
 
-    <section class="admin-workspace">
-        <aside class="admin-panel admin-browser">
+    <section id="admin-locked-shell" class="admin-panel admin-locked-shell" aria-live="polite">
+        <p class="admin-panel-title">Locked Workspace</p>
+        <h2 class="admin-locked-title">Sign in to unlock post management.</h2>
+        <p class="admin-copy">
+            The editor, administrative post list, and destructive actions stay hidden until the
+            browser presents a valid admin session cookie.
+        </p>
+        <ul class="admin-locked-list">
+            <li>Google sign-in is exchanged for an <code>HttpOnly</code> session cookie.</li>
+            <li>The browser workspace is only revealed after the authenticated session check succeeds.</li>
+            <li>Administrative API calls require the authenticated cookie and the allowed browser origin.</li>
+        </ul>
+    </section>
+
+    <section id="admin-workspace" class="admin-workspace" hidden>
+        <section class="admin-panel admin-workspace-header">
+            <div>
+                <p class="admin-panel-title">Workspace</p>
+                <h2 id="workspace-title" class="admin-workspace-title">Posts</h2>
+                <p id="workspace-copy" class="admin-copy">
+                    Review the administrative listing, select a post to edit, or create a new one.
+                </p>
+            </div>
+            <div class="admin-view-switch" role="tablist" aria-label="Administrative workspace">
+                <button type="button" id="workspace-posts-button" class="admin-view-tab" data-view="posts" aria-selected="true">Posts</button>
+                <button type="button" id="workspace-editor-button" class="admin-view-tab" data-view="editor" aria-selected="false">Editor</button>
+            </div>
+        </section>
+
+        <section id="admin-posts-view" class="admin-panel admin-view-panel">
             <div class="admin-browser-header">
                 <div>
                     <p class="admin-panel-title">Posts</p>
-                    <p class="admin-copy">Authenticated listing from <code>{{ runtime.apiUrl }}/admin/posts</code>.</p>
+                    <p class="admin-copy">Authenticated administrative post listing.</p>
                 </div>
                 <div class="admin-actions admin-actions-compact">
-                    <button type="button" id="new-post-button" class="admin-button admin-button-secondary">New Post</button>
+                    <button type="button" id="new-post-button" class="admin-button">New Post</button>
                     <button type="button" id="refresh-posts-button" class="admin-button admin-button-secondary">Refresh Posts</button>
                 </div>
             </div>
 
-            <label class="admin-field">
-                <span>Status filter</span>
-                <select id="post-filter" class="admin-select">
-                    <option value="all">All statuses</option>
-                    <option value="draft">Draft</option>
-                    <option value="private">Private</option>
-                    <option value="public">Public</option>
-                    <option value="trashed">Trashed</option>
-                </select>
-            </label>
-
-            <ul id="post-list" class="admin-post-list" aria-live="polite">
-                <li class="admin-empty">Sign in to load the administrative post list.</li>
-            </ul>
-        </aside>
-
-        <section class="admin-panel admin-editor">
-            <div class="admin-editor-header">
-                <div>
-                    <p class="admin-panel-title">Editor</p>
-                    <p id="editor-caption" class="admin-copy">Create a new post or load an existing post from the list.</p>
-                </div>
-                <a id="open-public-link" class="admin-link" href="#" target="_blank" rel="noreferrer noopener" hidden>Open public page</a>
+            <div class="admin-posts-toolbar">
+                <label class="admin-field admin-filter-field">
+                    <span>Status filter</span>
+                    <select id="post-filter" class="admin-select">
+                        <option value="all">All statuses</option>
+                        <option value="draft">Draft</option>
+                        <option value="private">Private</option>
+                        <option value="public">Public</option>
+                        <option value="trashed">Trashed</option>
+                    </select>
+                </label>
             </div>
 
-            <form id="post-form" class="admin-form">
-                <input type="hidden" id="source-slug" name="sourceSlug">
-                <input type="hidden" id="source-public-id" name="sourcePublicId">
+            <div class="admin-posts-table-shell">
+                <table class="admin-posts-table">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Slug</th>
+                            <th>Status</th>
+                            <th>Updated</th>
+                            <th>Revision</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="post-list">
+                        <tr>
+                            <td class="admin-empty" colspan="6">Sign in to load the administrative post list.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
 
-                <div class="admin-form-grid">
-                    <label class="admin-field">
-                        <span>Canonical slug</span>
-                        <input id="slug-input" name="slug" type="text" autocomplete="off" required>
-                    </label>
-                    <label class="admin-field">
-                        <span>Status</span>
-                        <select id="status-input" name="status" class="admin-select">
-                            <option value="draft">Draft</option>
-                            <option value="private">Private</option>
-                            <option value="public">Public</option>
-                            <option value="trashed">Trashed</option>
-                        </select>
-                    </label>
+        <section id="admin-editor-view" class="admin-editor-view" hidden>
+            <section class="admin-panel admin-editor">
+                <div class="admin-editor-header">
+                    <div>
+                        <p class="admin-panel-title">Editor</p>
+                        <p id="editor-caption" class="admin-copy">Create a new post or load an existing post from the list.</p>
+                    </div>
+                    <a id="open-public-link" class="admin-link" href="#" target="_blank" rel="noreferrer noopener" hidden>Open public page</a>
                 </div>
 
-                <label class="admin-field">
-                    <span>Title</span>
-                    <input id="title-input" name="title" type="text" autocomplete="off" required>
-                </label>
+                <form id="post-form" class="admin-form">
+                    <input type="hidden" id="source-slug" name="sourceSlug">
+                    <input type="hidden" id="source-public-id" name="sourcePublicId">
 
-                <label class="admin-field">
-                    <span>Summary</span>
-                    <textarea id="summary-input" name="summary" rows="3"></textarea>
-                </label>
+                    <div class="admin-form-grid">
+                        <label class="admin-field">
+                            <span>Canonical slug</span>
+                            <input id="slug-input" name="slug" type="text" autocomplete="off" required>
+                        </label>
+                        <label class="admin-field">
+                            <span>Status</span>
+                            <select id="status-input" name="status" class="admin-select">
+                                <option value="draft">Draft</option>
+                                <option value="private">Private</option>
+                                <option value="public">Public</option>
+                                <option value="trashed">Trashed</option>
+                            </select>
+                        </label>
+                    </div>
 
-                <label class="admin-field">
-                    <span>AsciiDoc body</span>
-                    <textarea id="body-input" name="bodyAdoc" rows="18" spellcheck="false" required></textarea>
-                </label>
-
-                <div class="admin-form-grid admin-form-grid-meta">
                     <label class="admin-field">
-                        <span>Revision</span>
-                        <input id="revision-input" name="revisionNo" type="number" min="1" step="1" readonly>
+                        <span>Title</span>
+                        <input id="title-input" name="title" type="text" autocomplete="off" required>
                     </label>
+
                     <label class="admin-field">
-                        <span>Stable public ID</span>
-                        <input id="public-id-input" name="publicId" type="text" readonly>
+                        <span>Summary</span>
+                        <textarea id="summary-input" name="summary" rows="3"></textarea>
                     </label>
+
+                    <label class="admin-field">
+                        <span>AsciiDoc body</span>
+                        <textarea id="body-input" name="bodyAdoc" rows="20" spellcheck="false" required></textarea>
+                    </label>
+
+                    <div class="admin-form-grid admin-form-grid-meta">
+                        <label class="admin-field">
+                            <span>Revision</span>
+                            <input id="revision-input" name="revisionNo" type="number" min="1" step="1" readonly>
+                        </label>
+                        <label class="admin-field">
+                            <span>Stable public ID</span>
+                            <input id="public-id-input" name="publicId" type="text" readonly>
+                        </label>
+                    </div>
+
+                    <div class="admin-form-grid admin-form-grid-meta">
+                        <label class="admin-field">
+                            <span>Created at</span>
+                            <input id="created-at-input" name="createdAt" type="text" readonly>
+                        </label>
+                        <label class="admin-field">
+                            <span>Updated at</span>
+                            <input id="updated-at-input" name="updatedAt" type="text" readonly>
+                        </label>
+                    </div>
+
+                    <div class="admin-actions">
+                        <button type="submit" id="save-post-button" class="admin-button">Create Post</button>
+                        <button type="button" id="trash-post-button" class="admin-button admin-button-danger" disabled>Move to Trash</button>
+                    </div>
+                </form>
+            </section>
+
+            <aside class="admin-panel admin-preview-shell">
+                <div class="admin-preview-header">
+                    <div>
+                        <p class="admin-panel-title">Live Preview</p>
+                        <p id="preview-caption" class="admin-copy">Rendered preview updates as you type.</p>
+                    </div>
                 </div>
 
-                <div class="admin-form-grid admin-form-grid-meta">
-                    <label class="admin-field">
-                        <span>Created at</span>
-                        <input id="created-at-input" name="createdAt" type="text" readonly>
-                    </label>
-                    <label class="admin-field">
-                        <span>Updated at</span>
-                        <input id="updated-at-input" name="updatedAt" type="text" readonly>
-                    </label>
-                </div>
-
-                <div class="admin-actions">
-                    <button type="submit" id="save-post-button" class="admin-button">Create Post</button>
-                    <button type="button" id="trash-post-button" class="admin-button admin-button-danger" disabled>Move to Trash</button>
-                </div>
-            </form>
+                <article class="admin-preview-article">
+                    <header class="admin-preview-meta">
+                        <p id="preview-status-chip" class="admin-preview-status">draft</p>
+                        <h2 id="preview-title" class="admin-preview-title">Untitled post</h2>
+                        <p id="preview-summary" class="admin-preview-summary" hidden></p>
+                    </header>
+                    <div id="preview-body" class="admin-preview-body post-body">
+                        <p class="admin-empty">The live rendered preview will appear here.</p>
+                    </div>
+                </article>
+            </aside>
         </section>
     </section>
-
-    <details class="admin-details">
-        <summary>Configuration visible to the browser</summary>
-        <dl class="admin-config">
-            <div>
-                <dt>API origin</dt>
-                <dd><code>{{ runtime.apiUrl }}</code></dd>
-            </div>
-            <div>
-                <dt>Firebase project</dt>
-                <dd><code>{{ runtime.firebase.projectId or "(missing)" }}</code></dd>
-            </div>
-            <div>
-                <dt>Firebase auth domain</dt>
-                <dd><code>{{ runtime.firebase.authDomain or "(missing)" }}</code></dd>
-            </div>
-        </dl>
-    </details>
 
     <noscript>
         <p class="admin-error">JavaScript is required for the Firebase sign-in flow.</p>
