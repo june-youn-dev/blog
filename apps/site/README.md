@@ -84,7 +84,7 @@ pnpm run clean
 
 ## Local browser check
 
-1. Start the API in `blog/apps/api` with `pnpm run worker:dev`.
+1. Start the public API from `blog/apps/api` with `pnpm run dev`.
 2. Build the site once with the required environment variables.
 3. Run `pnpm run dev`.
 4. Open `http://localhost:8080/`.

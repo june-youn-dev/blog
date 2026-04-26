@@ -30,7 +30,7 @@ nvm use
 pnpm install
 pnpm rebuild workerd esbuild
 pnpm run migrate:local
-pnpm run worker:dev
+pnpm run dev
 ```
 
 Then build and serve the site:
@@ -42,6 +42,9 @@ pnpm install
 BLOG_API_URL=http://localhost:8787 pnpm run build
 pnpm run dev
 ```
+
+The API workspace root (`apps/api`) is the only supported command entrypoint.
+Use `pnpm run dev`, `pnpm run deploy`, and `pnpm run check` there instead of calling Wrangler from subdirectories.
 
 For package-specific setup and commands, read:
 

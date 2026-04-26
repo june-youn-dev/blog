@@ -40,10 +40,17 @@ Minimum meanings:
 - `ADMIN_FIREBASE_UID`: the single allowed administrator identity
 - `ADMIN_ORIGIN`: allowed browser origin for credentialed administrative requests
 
+## Layout
+
+- `public/`: public read-only Worker
+- `admin/`: authenticated administrative Worker
+- `core/`: shared DTO, validation, and D1 logic
+- workspace root (`apps/api`): the only supported command entrypoint
+
 ## Run locally
 
 ```sh
-pnpm run worker:dev
+pnpm run dev
 ```
 
 Default local address:
@@ -83,6 +90,15 @@ pnpm run bindings:check
 ```sh
 pnpm run check
 pnpm run migrate:local
+pnpm run migrate:remote
+pnpm run dev
+pnpm run dev:admin
+pnpm run build
+pnpm run build:admin
+pnpm run deploy:check
+pnpm run deploy:check:admin
+pnpm run deploy
+pnpm run deploy:admin
 pnpm run sql:lint
 pnpm run sql:fix
 pnpm run rust:check
@@ -90,8 +106,6 @@ pnpm run rust:test
 pnpm run rust:lint
 pnpm run rust:fmt
 pnpm run rust:fmt:check
-pnpm run worker:dev
-pnpm run rust:build
 pnpm run bindings:generate
 pnpm run bindings:check
 ```
