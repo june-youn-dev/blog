@@ -47,3 +47,14 @@ For package-specific setup and commands, read:
 
 - [`apps/api/README.md`](./apps/api/README.md)
 - [`apps/site/README.md`](./apps/site/README.md)
+
+## Standard verification
+
+Run the full repository verification path with:
+
+```sh
+cd blog
+bash scripts/check-all.sh
+```
+
+Repository-wide engineering rules live in [`ENGINEERING_GUARDRAILS.md`](./ENGINEERING_GUARDRAILS.md).
