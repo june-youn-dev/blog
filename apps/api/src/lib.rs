@@ -40,8 +40,9 @@ use uuid::Uuid;
 use worker::{Context, Env, HttpRequest, event};
 
 use crate::auth::{
-    AuthError, Authenticated, authenticate_admin_firebase_token, clear_session_cookie,
-    has_valid_session_cookie, is_allowed_admin_origin, issue_session_cookie, resolved_admin_origin,
+    AuthError, Authenticated, admin_enabled, authenticate_admin_firebase_token,
+    clear_session_cookie, has_valid_session_cookie, is_allowed_admin_origin, issue_session_cookie,
+    resolved_admin_origin,
 };
 use crate::db::{TrashResult, UpdateResult, WriteError};
 use crate::dto::{
@@ -116,18 +117,22 @@ async fn fetch(
     env: Env,
     _ctx: Context,
 ) -> worker::Result<axum::http::Response<axum::body::Body>> {
+    let is_admin_enabled = admin_enabled(&env);
     let method = req.method().clone();
     let uri = req.uri().clone();
     let path = uri.path().to_owned();
-    let require_admin_origin = !is_local_host(uri.host());
+    let require_admin_origin = is_admin_enabled && !is_local_host(uri.host());
     let configured_admin_origin = match resolved_admin_origin(&env, require_admin_origin) {
         Ok(origin) => origin,
         Err(error) => return Ok(error.into_response()),
     };
     let request_origin =
         req.headers().get(ORIGIN).and_then(|value| value.to_str().ok()).map(str::to_owned);
-    let allowed_origin =
-        allowed_admin_origin(configured_admin_origin.as_deref(), request_origin.as_deref());
+    let allowed_origin = is_admin_enabled
+        .then(|| {
+            allowed_admin_origin(configured_admin_origin.as_deref(), request_origin.as_deref())
+        })
+        .flatten();
 
     if method == Method::OPTIONS
         && is_browser_api_path(&path)
@@ -157,7 +162,7 @@ async fn fetch(
     }
 
     let is_production_https = should_attach_hsts(&uri);
-    let mut response = router(env).call(req).await?;
+    let mut response = router(env, is_admin_enabled).call(req).await?;
 
     if is_browser_api_path(&path)
         && let Some(origin) = allowed_origin.as_deref()
@@ -225,17 +230,26 @@ fn is_local_host(host: Option<&str>) -> bool {
     matches!(host, Some("localhost" | "127.0.0.1" | "[::1]"))
 }
 
-fn router(env: Env) -> Router {
-    Router::new()
+fn router(env: Env, is_admin_enabled: bool) -> Router {
+    let router = Router::new()
         .merge(SwaggerUi::new(DOCS_UI_PATH).url(OPENAPI_JSON_PATH, ApiDoc::openapi()))
         .route(ROOT_PATH, get(root))
-        .route(AUTH_SESSION_PATH, get(get_session).post(create_session).delete(delete_session))
-        .route(AUTH_FIREBASE_SESSION_PATH, axum::routing::post(create_firebase_session))
-        .route(ADMIN_POSTS_PATH, get(list_admin_posts))
-        .route(POSTS_PATH, get(list_posts).post(create_post))
+        .route(POSTS_PATH, get(list_posts))
         .route(POSTS_BY_ID_PATH, get(get_post_by_public_id))
-        .route(POSTS_BY_SLUG_PATH, get(get_post_by_slug).put(update_post).delete(delete_post))
-        .with_state(env)
+        .route(POSTS_BY_SLUG_PATH, get(get_post_by_slug));
+
+    let router = if is_admin_enabled {
+        router
+            .route(AUTH_SESSION_PATH, get(get_session).post(create_session).delete(delete_session))
+            .route(AUTH_FIREBASE_SESSION_PATH, axum::routing::post(create_firebase_session))
+            .route(ADMIN_POSTS_PATH, get(list_admin_posts))
+            .route(POSTS_PATH, axum::routing::post(create_post))
+            .route(POSTS_BY_SLUG_PATH, axum::routing::put(update_post).delete(delete_post))
+    } else {
+        router
+    };
+
+    router.with_state(env)
 }
 
 #[utoipa::path(

@@ -32,6 +32,23 @@ pub(crate) const LOCAL_ADMIN_ORIGINS: &[&str] = &[
     "http://127.0.0.1:8081",
 ];
 
+/// Returns whether the deployed surface should expose administrative routes.
+///
+/// The flag is controlled by the `BLOG_ENABLE_ADMIN` environment variable.
+/// Administrative routes are disabled by default and are enabled only when the
+/// variable is set to an explicit true-like value such as `1`, `true`, `yes`,
+/// or `on`.
+pub(crate) fn admin_enabled(env: &Env) -> bool {
+    env.var("BLOG_ENABLE_ADMIN")
+        .ok()
+        .map(|value| parse_admin_enabled_flag(&value.to_string()))
+        .unwrap_or(false)
+}
+
+fn parse_admin_enabled_flag(raw: &str) -> bool {
+    matches!(raw.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
+}
+
 /// Constant-time equality for shared-secret comparisons.
 pub(crate) fn secrets_match(submitted: &[u8], expected: &[u8]) -> bool {
     submitted.ct_eq(expected).into()
@@ -197,8 +214,22 @@ mod tests {
 
     use super::{
         LOCAL_ADMIN_ORIGINS, is_allowed_admin_origin, normalize_admin_origin,
-        resolve_admin_origin_value, session_cookie_request_is_allowed,
+        parse_admin_enabled_flag, resolve_admin_origin_value, session_cookie_request_is_allowed,
     };
+
+    #[test]
+    fn parses_false_like_admin_flags() {
+        for value in ["0", "false", "FALSE", "no", "off", "", "enabled", "maybe"] {
+            assert!(!parse_admin_enabled_flag(value), "{value} should disable admin");
+        }
+    }
+
+    #[test]
+    fn parses_true_like_admin_flags() {
+        for value in ["1", "true", "TRUE", "yes", "on"] {
+            assert!(parse_admin_enabled_flag(value), "{value} should keep admin enabled");
+        }
+    }
 
     #[test]
     fn recognizes_allowed_admin_origins() {
