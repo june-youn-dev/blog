@@ -87,6 +87,7 @@ pnpm run bindings:check
 ## Common commands
 
 ```sh
+pnpm run check
 pnpm run migrate:local
 pnpm run sql:lint
 pnpm run sql:fix

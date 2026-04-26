@@ -8,8 +8,8 @@
     },
     "scripts": {
         "migrate:local": "wrangler d1 migrations apply blog --local",
-        "sql:lint": "pipx run sqlfluff==4.1.0 lint migrations",
-        "sql:fix": "pipx run sqlfluff==4.1.0 fix migrations",
+        "sql:lint": "PIPX_HOME=.pipx PIPX_BIN_DIR=.pipx/bin PIPX_LOG_DIR=.pipx/logs pipx run sqlfluff==4.1.0 lint migrations",
+        "sql:fix": "PIPX_HOME=.pipx PIPX_BIN_DIR=.pipx/bin PIPX_LOG_DIR=.pipx/logs pipx run sqlfluff==4.1.0 fix migrations",
         "rust:fmt": "cargo +nightly fmt",
         "rust:fmt:check": "cargo +nightly fmt -- --check",
         "rust:lint": "cargo clippy --target wasm32-unknown-unknown -- -D warnings",
@@ -19,7 +19,8 @@
         "worker:dev": "wrangler dev",
         "bindings:format": "prettier --write \"../site/src/api-types/**/*.ts\"",
         "bindings:generate": "cargo test --lib export_bindings && pnpm run bindings:format",
-        "bindings:check": "pnpm run bindings:generate && git diff --exit-code ../site/src/api-types"
+        "bindings:check": "pnpm run bindings:generate && git diff --exit-code ../site/src/api-types",
+        "check": "pnpm run rust:fmt:check && pnpm run rust:lint && pnpm run rust:check && pnpm run rust:test && pnpm run bindings:check && pnpm run sql:lint"
     },
     "devDependencies": {
         "prettier": "^3.8.2",
