@@ -15,68 +15,72 @@ bodyClass: admin-page
 <section
     id="admin-app"
     class="admin-shell"
+    data-admin-enabled="{{ runtime.adminEnabled and 'true' or 'false' }}"
+    {% if runtime.adminEnabled %}
     data-api-url="{{ runtime.apiUrl }}"
     data-firebase-api-key="{{ runtime.firebase.apiKey }}"
     data-firebase-auth-domain="{{ runtime.firebase.authDomain }}"
     data-firebase-app-id="{{ runtime.firebase.appId }}"
     data-firebase-project-id="{{ runtime.firebase.projectId }}"
+    {% endif %}
 >
     <p class="admin-eyebrow">Administrative Access</p>
     <h1>Admin Console</h1>
-    <p class="admin-lede">
-        This workflow signs the browser in with Google through Firebase Authentication, exchanges
-        the resulting Firebase ID token for the blog API's <code>HttpOnly</code> admin session
-        cookie, and then unlocks the authenticated post-management workspace.
-    </p>
-
-    <section class="admin-panel admin-session-shell">
-        <div class="admin-session-header">
-            <div>
-                <p class="admin-panel-title">Session</p>
-                <p id="admin-session-label" class="admin-session-label" data-state="checking">
-                    Checking browser session…
-                </p>
-            </div>
-            <div class="admin-actions">
-                <button type="button" id="sign-in-button" class="admin-button">Continue with Google</button>
-                <button type="button" id="refresh-session-button" class="admin-button admin-button-secondary">Refresh Session Status</button>
-                <button type="button" id="clear-session-button" class="admin-button admin-button-secondary">Sign Out</button>
-            </div>
-        </div>
-
-        <p id="admin-status" class="admin-status" role="status" aria-live="polite">
-            Checking whether the browser already has a valid admin session cookie.
+    {% if runtime.adminEnabled %}
+        <p class="admin-lede">
+            This workflow signs the browser in with Google through Firebase Authentication, exchanges
+            the resulting Firebase ID token for the blog API's <code>HttpOnly</code> admin session
+            cookie, and then unlocks the authenticated post-management workspace.
         </p>
-    </section>
 
-    <section id="admin-locked-shell" class="admin-panel admin-locked-shell" aria-live="polite">
-        <p class="admin-panel-title">Locked Workspace</p>
-        <h2 class="admin-locked-title">Sign in to unlock post management.</h2>
-        <p class="admin-copy">
-            The editor, administrative post list, and destructive actions stay hidden until the
-            browser presents a valid admin session cookie.
-        </p>
-        <ul class="admin-locked-list">
-            <li>Google sign-in is exchanged for an <code>HttpOnly</code> session cookie.</li>
-            <li>The browser workspace is only revealed after the authenticated session check succeeds.</li>
-            <li>Administrative API calls require the authenticated cookie and the allowed browser origin.</li>
-        </ul>
-    </section>
+        <section class="admin-panel admin-session-shell">
+            <div class="admin-session-header">
+                <div>
+                    <p class="admin-panel-title">Session</p>
+                    <p id="admin-session-label" class="admin-session-label" data-state="checking">
+                        Checking browser session…
+                    </p>
+                </div>
+                <div class="admin-actions">
+                    <button type="button" id="sign-in-button" class="admin-button">Continue with Google</button>
+                    <button type="button" id="refresh-session-button" class="admin-button admin-button-secondary">Refresh Session Status</button>
+                    <button type="button" id="clear-session-button" class="admin-button admin-button-secondary">Sign Out</button>
+                </div>
+            </div>
 
-    <section id="admin-workspace" class="admin-workspace" hidden>
-        <section class="admin-panel admin-workspace-header">
-            <div>
-                <p class="admin-panel-title">Workspace</p>
-                <h2 id="workspace-title" class="admin-workspace-title">Posts</h2>
-                <p id="workspace-copy" class="admin-copy">
-                    Review the administrative listing, select a post to edit, or create a new one.
-                </p>
-            </div>
-            <div class="admin-view-switch" role="tablist" aria-label="Administrative workspace">
-                <button type="button" id="workspace-posts-button" class="admin-view-tab" data-view="posts" aria-selected="true">Posts</button>
-                <button type="button" id="workspace-editor-button" class="admin-view-tab" data-view="editor" aria-selected="false">Editor</button>
-            </div>
+            <p id="admin-status" class="admin-status" role="status" aria-live="polite">
+                Checking whether the browser already has a valid admin session cookie.
+            </p>
         </section>
+
+        <section id="admin-locked-shell" class="admin-panel admin-locked-shell" aria-live="polite">
+            <p class="admin-panel-title">Locked Workspace</p>
+            <h2 class="admin-locked-title">Sign in to unlock post management.</h2>
+            <p class="admin-copy">
+                The editor, administrative post list, and destructive actions stay hidden until the
+                browser presents a valid admin session cookie.
+            </p>
+            <ul class="admin-locked-list">
+                <li>Google sign-in is exchanged for an <code>HttpOnly</code> session cookie.</li>
+                <li>The browser workspace is only revealed after the authenticated session check succeeds.</li>
+                <li>Administrative API calls require the authenticated cookie and the allowed browser origin.</li>
+            </ul>
+        </section>
+
+        <section id="admin-workspace" class="admin-workspace" hidden>
+            <section class="admin-panel admin-workspace-header">
+                <div>
+                    <p class="admin-panel-title">Workspace</p>
+                    <h2 id="workspace-title" class="admin-workspace-title">Posts</h2>
+                    <p id="workspace-copy" class="admin-copy">
+                        Review the administrative listing, select a post to edit, or create a new one.
+                    </p>
+                </div>
+                <div class="admin-view-switch" role="tablist" aria-label="Administrative workspace">
+                    <button type="button" id="workspace-posts-button" class="admin-view-tab" data-view="posts" aria-selected="true">Posts</button>
+                    <button type="button" id="workspace-editor-button" class="admin-view-tab" data-view="editor" aria-selected="false">Editor</button>
+                </div>
+            </section>
 
         <section id="admin-posts-view" class="admin-panel admin-view-panel">
             <div class="admin-browser-header">
@@ -218,9 +222,24 @@ bodyClass: admin-page
                 </article>
             </aside>
         </section>
-    </section>
+        </section>
 
-    <noscript>
-        <p class="admin-error">JavaScript is required for the Firebase sign-in flow.</p>
-    </noscript>
+        <noscript>
+            <p class="admin-error">JavaScript is required for the Firebase sign-in flow.</p>
+        </noscript>
+    {% else %}
+        <p class="admin-lede">
+            The administrative console is disabled for this deployment.
+        </p>
+
+        <section class="admin-panel admin-locked-shell" aria-live="polite">
+            <p class="admin-panel-title">Unavailable</p>
+            <h2 class="admin-locked-title">Administrative access is not published on this site.</h2>
+            <p class="admin-copy">
+                This deployment exposes the public blog only. Browser-based post management and
+                Firebase-backed sign-in are intentionally disabled until the administrative surface
+                is deployed with its own configuration and authentication flow.
+            </p>
+        </section>
+    {% endif %}
 </section>

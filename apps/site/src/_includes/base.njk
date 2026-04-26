@@ -32,6 +32,7 @@
     <main>
         {{ content | safe }}
     </main>
-    {% if pageScript %}<script type="module" src="{{ pageScript }}"></script>{% endif %}
+    {% set shouldLoadPageScript = pageScript and (page.url != "/admin/" or runtime.adminEnabled) %}
+    {% if shouldLoadPageScript %}<script type="module" src="{{ pageScript }}"></script>{% endif %}
 </body>
 </html>

@@ -1,5 +1,10 @@
 const allowLocalDefaults = process.env.BLOG_ALLOW_LOCAL_DEFAULTS === "1";
 
+function parseAdminEnabledFlag() {
+  const raw = (process.env.BLOG_ENABLE_ADMIN || "").trim().toLowerCase();
+  return ["1", "true", "yes", "on"].includes(raw);
+}
+
 function readRequiredEnv(name) {
   const value = (process.env[name] || "").trim();
   if (!value) {
@@ -20,21 +25,31 @@ function readApiUrl() {
 }
 
 const apiUrl = readApiUrl();
-const firebaseProjectId = allowLocalDefaults
-  ? (process.env.FIREBASE_PROJECT_ID || "").trim()
-  : readRequiredEnv("FIREBASE_PROJECT_ID");
-const firebaseApiKey = allowLocalDefaults
-  ? (process.env.FIREBASE_WEB_API_KEY || "").trim()
-  : readRequiredEnv("FIREBASE_WEB_API_KEY");
-const firebaseAppId = allowLocalDefaults
-  ? (process.env.FIREBASE_APP_ID || "").trim()
-  : readRequiredEnv("FIREBASE_APP_ID");
+const adminEnabled = parseAdminEnabledFlag();
+const firebaseProjectId = adminEnabled
+  ? (allowLocalDefaults
+      ? (process.env.FIREBASE_PROJECT_ID || "").trim()
+      : readRequiredEnv("FIREBASE_PROJECT_ID"))
+  : "";
+const firebaseApiKey = adminEnabled
+  ? (allowLocalDefaults
+      ? (process.env.FIREBASE_WEB_API_KEY || "").trim()
+      : readRequiredEnv("FIREBASE_WEB_API_KEY"))
+  : "";
+const firebaseAppId = adminEnabled
+  ? (allowLocalDefaults
+      ? (process.env.FIREBASE_APP_ID || "").trim()
+      : readRequiredEnv("FIREBASE_APP_ID"))
+  : "";
 
 export default {
+  adminEnabled,
   apiUrl,
   firebase: {
     apiKey: firebaseApiKey,
-    authDomain: (process.env.FIREBASE_AUTH_DOMAIN || `${firebaseProjectId}.firebaseapp.com`).trim(),
+    authDomain: adminEnabled
+      ? (process.env.FIREBASE_AUTH_DOMAIN || `${firebaseProjectId}.firebaseapp.com`).trim()
+      : "",
     appId: firebaseAppId,
     projectId: firebaseProjectId,
   },
