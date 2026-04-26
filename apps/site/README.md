@@ -34,6 +34,12 @@ If omitted, the site derives `<FIREBASE_PROJECT_ID>.firebaseapp.com`.
 
 ## Common commands
 
+Run the standard local verification path:
+
+```sh
+pnpm run check
+```
+
 Fetch public posts from the API:
 
 ```sh
