@@ -7,6 +7,7 @@ import hljs from "highlight.js";
 import katex from "katex";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const CSS_ASSET_KEYS = ["css/base.css", "css/site.css", "css/admin.css"];
 
 const asciidoctor = Asciidoctor();
 
@@ -177,10 +178,14 @@ export default function (eleventyConfig) {
     });
   });
 
-  // Content hash for cache busting on style.css.
-  const styleCss = readFileSync(resolve(__dirname, "src/css/style.css"), "utf8");
-  const styleHash = createHash("md5").update(styleCss).digest("hex").slice(0, 8);
-  eleventyConfig.addGlobalData("styleHash", styleHash);
+  // Content hashes for cache busting on first-party CSS files.
+  const cssHashes = Object.fromEntries(
+    CSS_ASSET_KEYS.map((key) => {
+      const css = readFileSync(resolve(__dirname, "src", key), "utf8");
+      return [key, createHash("md5").update(css).digest("hex").slice(0, 8)];
+    }),
+  );
+  eleventyConfig.addGlobalData("cssHashes", cssHashes);
 
   // Inline small CSS files that are conditionally loaded.
   const hljsCss = readFileSync(
