@@ -39,8 +39,9 @@ use uuid::Uuid;
 use worker::{Context, Env, HttpRequest, event};
 
 use crate::auth::{
-    AuthError, Authenticated, clear_session_cookie, has_valid_session_cookie, issue_session_cookie,
-    verify_firebase_id_token,
+    AuthError, Authenticated, authenticate_admin_firebase_token, clear_session_cookie,
+    configured_admin_origin, has_valid_session_cookie, is_allowed_admin_origin,
+    issue_session_cookie,
 };
 use crate::db::{TrashResult, UpdateResult, WriteError};
 use crate::dto::{
@@ -73,12 +74,6 @@ const API_ROUTE_PATHS: &[&str] = &[
 const HSTS_VALUE: &str = "max-age=31536000; includeSubDomains; preload";
 const CORS_ALLOW_METHODS: &str = "GET, POST, PUT, DELETE, OPTIONS";
 const CORS_ALLOW_HEADERS: &str = "authorization, content-type";
-const LOCAL_ADMIN_ORIGINS: &[&str] = &[
-    "http://localhost:8080",
-    "http://127.0.0.1:8080",
-    "http://localhost:8081",
-    "http://127.0.0.1:8081",
-];
 
 #[derive(OpenApi)]
 #[openapi(
@@ -209,16 +204,8 @@ fn apply_cors_headers(headers: &mut axum::http::HeaderMap, origin: &str) {
 
 fn allowed_admin_origin(env: &Env, origin: Option<&str>) -> Option<String> {
     let origin = origin?;
-
-    if is_local_admin_origin(origin) {
-        return Some(origin.to_owned());
-    }
-
-    env.var("ADMIN_ORIGIN").ok().map(|value| value.to_string()).filter(|allowed| origin == allowed)
-}
-
-fn is_local_admin_origin(origin: &str) -> bool {
-    LOCAL_ADMIN_ORIGINS.contains(&origin)
+    is_allowed_admin_origin(origin, configured_admin_origin(env).as_deref())
+        .then(|| origin.to_owned())
 }
 
 fn is_browser_api_path(path: &str) -> bool {
@@ -329,8 +316,7 @@ async fn create_firebase_session(
     Json(body): Json<FirebaseSessionRequest>,
 ) -> Result<([(axum::http::header::HeaderName, String); 1], Json<SessionIssuedResponse>), AuthError>
 {
-    let identity = verify_firebase_id_token(&env, &body.id_token).await?;
-    let _ = identity.uid;
+    authenticate_admin_firebase_token(&env, &body.id_token).await?;
     let cookie = issue_session_cookie(&env, request_requires_secure_cookie(&headers))?;
     Ok(([(SET_COOKIE, cookie)], Json(SessionIssuedResponse { ok: true, session: "issued".into() })))
 }
@@ -603,10 +589,10 @@ mod tests {
     use utoipa::OpenApi;
 
     use super::{
-        API_ROUTE_PATHS, ApiDoc, DOCS_UI_PATH, LOCAL_ADMIN_ORIGINS, OPENAPI_JSON_PATH,
-        https_redirect_location, is_browser_api_path, is_local_admin_origin,
-        request_requires_secure_cookie, should_attach_hsts,
+        API_ROUTE_PATHS, ApiDoc, DOCS_UI_PATH, OPENAPI_JSON_PATH, https_redirect_location,
+        is_browser_api_path, request_requires_secure_cookie, should_attach_hsts,
     };
+    use crate::auth::{LOCAL_ADMIN_ORIGINS, is_allowed_admin_origin};
 
     #[test]
     fn api_routes_are_unique() {
@@ -676,10 +662,10 @@ mod tests {
     #[test]
     fn local_admin_origins_match_allowlist() {
         for origin in LOCAL_ADMIN_ORIGINS {
-            assert!(is_local_admin_origin(origin));
+            assert!(is_allowed_admin_origin(origin, None));
         }
 
-        assert!(!is_local_admin_origin("https://blog.example.com"));
+        assert!(!is_allowed_admin_origin("https://blog.example.com", None));
     }
 
     #[test]
